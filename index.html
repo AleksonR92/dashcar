@@ -1,0 +1,2572 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Painel do Veículo</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111317">
+<link rel="icon" href="icon-192.png">
+<!-- iOS: permite abrir em tela cheia (sem barra do Safari) ao adicionar à Tela de Início -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Meu Veículo">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#111317; --bg2:#17191d; --panel:#1a1c20; --panel2:#1c1e22;
+    --border:#262931; --border2:#33363d; --text:#EDEAE3; --muted:#8a8f98;
+    --dim:#6a6f78; --dim2:#5a5f68; --amber:#E8A33D; --teal:#3D7068; --red:#C1503F;
+    --on-accent:#14161a; --sans:'Inter', sans-serif;
+    --mono:'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *,*::before,*::after{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg2); color:var(--text); font-family:var(--sans);
+    -webkit-font-smoothing:antialiased; min-height:100vh;
+  }
+  h1,h2,h3{ font-family:var(--sans); }
+  button, input, select, textarea{ font-family:inherit; }
+  #app{
+    max-width:520px; margin:0 auto; min-height:100vh; position:relative;
+    background:var(--bg); box-shadow:0 0 60px rgba(0,0,0,.35);
+    overflow-x:hidden; padding-bottom:8px;
+  }
+
+  /* ---------- header ---------- */
+  .header{ padding:18px 18px 16px; background:var(--bg2); border-bottom:1px solid var(--border); }
+  .header-top{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .header-id{ display:flex; align-items:flex-start; gap:10px; min-width:0; }
+  .vehicle-photo, .vehicle-photo-placeholder{
+    width:88px; height:88px; border-radius:18px; object-fit:cover; flex-shrink:0;
+    background:var(--panel2); border:1px solid var(--border2);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .header-id .txt{ min-width:0; }
+  .header-id h1{ margin:0; font-size:16.5px; font-weight:700; line-height:1.25;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .header-id p{ margin:2px 0 0; font-size:11.5px; color:var(--muted); }
+  .header-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .saving-tag{ font-size:11px; color:var(--dim); font-style:italic; }
+  .btn-ghost{
+    background:transparent; border:1px solid var(--border2); color:var(--text);
+    padding:7px 11px; border-radius:999px; font-size:11.5px; font-weight:600;
+    display:inline-flex; align-items:center; gap:6px; cursor:pointer; white-space:nowrap;
+  }
+  .btn-ghost:hover{ border-color:var(--dim2); }
+  .icon-btn{
+    width:32px; height:32px; border-radius:999px; background:var(--panel2);
+    border:1px solid var(--border); color:var(--muted); display:flex;
+    align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+  }
+  .icon-btn:hover{ color:var(--text); }
+  .header-actions-row{ display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .header-actions-row .btn-ghost{ flex:none; padding:5px 10px; font-size:10.5px; }
+  .odo-usage-row{ display:flex; gap:10px; margin-top:16px; align-items:stretch; }
+  .odo-card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px 16px; flex:1; min-width:0; }
+  .usage-card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px 16px; flex:1; min-width:0; }
+  .odo-divider{ height:1px; background:var(--border); margin:12px 0; }
+  .odo-label{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin-bottom:5px; font-weight:600; }
+  .odo-digits{ font-family:var(--mono); font-size:21px; font-weight:700; display:inline-flex; align-items:baseline; gap:2px; }
+  .odo-digit{ background:var(--panel2); border:1px solid var(--border2); border-radius:4px; width:16px; height:24px; text-align:center; overflow:hidden; position:relative; }
+  .odo-digit-strip{ display:block; }
+  .odo-digit-row{ display:block; height:24px; line-height:24px; }
+  .odo-suffix{ font-size:10.5px; color:var(--dim); margin-left:6px; font-weight:500; font-family:var(--sans); }
+  .consumo-val{ font-size:17px; font-weight:700; margin-top:5px; }
+  .consumo-sub{ font-size:11px; color:var(--dim); margin-top:3px; }
+
+  .maint-alert-banner{ display:flex; flex-direction:column; gap:6px; margin-top:14px; }
+  .maint-alert-item{ display:flex; align-items:center; gap:9px; background:var(--panel2); border:1px solid var(--border2); border-left:3px solid var(--amber); border-radius:10px; padding:9px 11px; }
+  .maint-alert-item.overdue{ border-left-color:var(--red); }
+  .maint-alert-txt{ display:flex; flex-direction:column; font-size:12px; line-height:1.4; }
+  .maint-alert-txt strong{ font-size:12.5px; color:var(--text); }
+  .maint-alert-txt span{ color:var(--muted); font-size:11px; }
+  .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:16px; }
+  .stat-card{ background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px; min-width:0; }
+  .stat-head{ display:flex; align-items:center; gap:5px; font-size:10px; color:var(--muted); margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .stat-val{ font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ---------- tabs ---------- */
+  .tabs{ display:flex; gap:4px; padding:8px; background:var(--bg2); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .tabs::-webkit-scrollbar{ display:none; }
+  .tab-btn{ flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center; gap:5px; padding:9px 4px; border-radius:8px; background:transparent; border:none; color:var(--dim); font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .tab-btn .tab-label{ overflow:hidden; text-overflow:ellipsis; }
+  .tab-btn.active{ background:var(--panel); color:var(--text); }
+
+  /* ---------- content ---------- */
+  .content{ padding:16px 16px 90px; }
+
+  .empty{ text-align:center; padding:48px 20px; color:var(--muted); }
+  .empty-icon{ display:flex; justify-content:center; margin-bottom:10px; opacity:.6; }
+  .empty-title{ font-size:14px; font-weight:600; color:var(--text); margin:0 0 4px; }
+  .empty-sub{ font-size:12.5px; color:var(--dim); margin:0; line-height:1.5; }
+  .err-msg{ color:var(--red); font-size:12px; margin-top:12px; }
+
+  .list{ display:flex; flex-direction:column; gap:10px; }
+  .card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+  .card-main{ flex:1; min-width:0; }
+  .card-title{ font-size:14px; font-weight:600; display:flex; align-items:center; gap:6px; }
+  .card-meta{ display:flex; gap:12px; margin-top:6px; font-size:11.5px; color:var(--muted); flex-wrap:wrap; }
+  .card-meta span{ display:inline-flex; align-items:center; gap:4px; }
+  .card-notes{ font-size:12px; color:var(--dim); margin:6px 0 0; line-height:1.45; }
+  .card-side{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0; }
+  .card-cost{ font-weight:700; font-size:14px; white-space:nowrap; }
+  .card-del{ background:transparent; border:none; color:var(--dim); cursor:pointer; padding:2px; display:flex; }
+  .card-del:hover{ color:var(--red); }
+
+  /* ---------- gamificação ---------- */
+  .level-card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:14px; }
+  .level-top{ display:flex; align-items:center; gap:12px; }
+  .level-badge{ width:40px; height:40px; border-radius:999px; background:var(--amber); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .level-title{ font-size:15px; font-weight:700; }
+  .level-sub{ font-size:11.5px; color:var(--muted); display:flex; align-items:center; gap:4px; margin-top:2px; }
+  .level-bar{ margin-top:12px; height:8px; border-radius:999px; background:var(--panel2); border:1px solid var(--border2); overflow:hidden; }
+  .level-bar-fill{ height:100%; background:var(--amber); border-radius:999px; transition:width .3s ease; }
+  .level-bar-label{ font-size:11px; color:var(--dim); margin-top:6px; text-align:right; }
+  .level-tier-tag{ display:inline-block; margin-left:6px; padding:2px 9px; border-radius:999px; font-size:10px; font-weight:800; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.35); vertical-align:middle; }
+  .mission-list{ display:flex; flex-direction:column; gap:10px; }
+  .mission-card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:11px 13px; display:flex; align-items:center; gap:11px; }
+  .mission-card.done{ border-color:var(--teal); }
+  .mission-icon{ width:34px; height:34px; border-radius:9px; background:var(--panel2); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .mission-icon.done{ background:var(--teal); }
+  .mission-body{ flex:1; min-width:0; }
+  .mission-title{ font-size:13.5px; font-weight:600; }
+  .mission-desc{ font-size:11.5px; color:var(--dim); margin-top:2px; line-height:1.4; }
+  .mission-xp{ font-size:11.5px; font-weight:700; color:var(--amber); white-space:nowrap; flex-shrink:0; }
+  .mission-xp.done{ display:flex; align-items:center; }
+
+  .fab{
+    position:fixed; right:calc(50% - 260px + 20px); bottom:22px; width:56px; height:56px;
+    border-radius:999px; border:none; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 8px 18px rgba(0,0,0,.4); cursor:pointer; z-index:20;
+  }
+  @media (max-width:559px){ .fab{ right:20px; } }
+
+  /* ---------- overlay / sheet ---------- */
+  .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:flex-end; justify-content:center; z-index:50; }
+  .overlay.center{ align-items:center; padding:20px; }
+  .sheet{
+    background:var(--bg2); width:100%; max-width:520px; max-height:88vh; overflow-y:auto;
+    border-radius:20px 20px 0 0; padding:20px 18px 28px; animation:slideUp .22s ease-out;
+    border-top:1px solid var(--border2);
+  }
+  .sheet.teal{ border-top-color:var(--teal); }
+  @keyframes slideUp{ from{ transform:translateY(24px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+  .sheet-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .sheet-head h2{ margin:0; font-size:16px; font-weight:700; }
+  .sheet-close{ background:var(--panel2); border:1px solid var(--border); border-radius:999px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; color:var(--muted); cursor:pointer; flex-shrink:0; }
+
+  .field{ display:block; margin-bottom:14px; }
+  .field-label{ display:block; font-size:11px; color:var(--muted); margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  input, select, textarea{
+    width:100%; background:var(--panel); border:1px solid var(--border2); border-radius:8px;
+    padding:10px 12px; color:var(--text); font-size:14px;
+  }
+  input:focus, select:focus, textarea:focus{ outline:none; border-color:var(--amber); }
+  textarea{ resize:vertical; }
+
+  .btn-primary{
+    width:100%; padding:13px; border-radius:10px; border:none; background:var(--amber);
+    color:var(--on-accent); font-weight:700; font-size:14px; display:flex; align-items:center;
+    justify-content:center; gap:6px; cursor:pointer; margin-top:6px;
+  }
+  .btn-primary.teal{ background:var(--teal); color:#fff; }
+  .btn-primary:hover{ filter:brightness(1.06); }
+
+  .tank-hint{ font-size:11px; color:var(--dim); margin:-6px 0 14px; line-height:1.5; }
+
+  .odo-quick-row{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .odo-quick-btn{
+    flex:1 1 18%; min-width:56px; background:var(--panel2); border:1px solid var(--border2); color:var(--muted);
+    padding:7px 4px; border-radius:8px; font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap;
+  }
+  .odo-quick-btn:hover{ color:var(--text); border-color:var(--dim2); }
+  .odo-quick-btn:active{ background:var(--panel); }
+
+  .gauge-box{ text-align:center; padding:6px 0 4px; }
+  .gauge-readout{ margin-top:8px; font-size:13px; font-weight:600; color:var(--text); }
+
+  .photo-picker{ display:flex; align-items:center; gap:14px; }
+  .photo-preview, .photo-preview-placeholder{
+    width:64px; height:64px; border-radius:12px; object-fit:cover; flex-shrink:0;
+    background:var(--panel2); border:1px solid var(--border2); display:flex;
+    align-items:center; justify-content:center;
+  }
+  .photo-actions{ display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .native-file-input{ font-size:11.5px; color:var(--muted); max-width:220px; padding:0; border:none; background:none; }
+  .photo-btn.remove{
+    background:transparent; border:1px solid var(--border2); color:var(--red); border-radius:8px;
+    padding:6px 10px; font-size:12px; display:inline-flex; align-items:center; gap:4px;
+    cursor:pointer; width:fit-content;
+  }
+
+  .theme-row{ display:flex; align-items:center; gap:12px; padding:11px 12px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; cursor:pointer; }
+  .theme-row.active{ border-color:var(--amber); background:var(--panel); }
+  .theme-swatch{ display:flex; flex-shrink:0; }
+  .theme-swatch span{ width:16px; height:16px; border-radius:50%; display:inline-block; border:1px solid rgba(0,0,0,.25); margin-left:-6px; }
+  .theme-swatch span:first-child{ margin-left:0; }
+  .theme-name{ flex:1; font-size:14px; }
+  .theme-check{ color:var(--amber); display:flex; flex-shrink:0; }
+
+  .vswitch-row{ display:flex; align-items:center; gap:10px; padding:10px; border:1px solid var(--border); border-radius:12px; margin-bottom:8px; cursor:pointer; background:var(--panel); }
+  .vswitch-row.active{ border-color:var(--amber); background:var(--panel2); }
+  .vswitch-photo{ width:40px; height:40px; border-radius:10px; object-fit:cover; background:var(--panel2); flex-shrink:0; }
+  .vswitch-tag{ font-size:9.5px; color:var(--amber); border:1px solid var(--amber); border-radius:999px; padding:1px 6px; margin-left:6px; font-weight:600; }
+
+  .warn-box{ background:var(--bg2); border:1px solid var(--border); border-radius:16px; padding:20px; max-width:360px; width:90%; }
+  .warn-head{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .warn-head h3{ margin:0; font-size:15px; }
+  .warn-text{ font-size:13px; color:var(--muted); line-height:1.55; margin:0 0 18px; }
+  .warn-actions{ display:flex; gap:10px; }
+  .warn-btn{ flex:1; padding:11px; border-radius:8px; border:none; font-weight:600; font-size:13px; cursor:pointer; }
+  .warn-btn.cancel{ background:var(--panel2); color:var(--text); border:1px solid var(--border2); }
+  .warn-btn.confirm{ background:var(--red); color:#fff; }
+
+  /* ---------- dashboard ---------- */
+  .dash-section h3{ font-size:12.5px; margin:0 0 8px; color:var(--muted); font-weight:600; }
+  .dash-filter{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; }
+  .dash-filter-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:10px; }
+  .dash-filter-btn{ padding:8px 14px; border-radius:8px; border:1px solid var(--border2); background:transparent; color:var(--text); font-size:12px; cursor:pointer; }
+  .dash-filter-btn.primary{ background:var(--amber); border-color:var(--amber); color:var(--on-accent); font-weight:700; }
+  .dash-card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; height:250px; position:relative; }
+  .dash-card.short{ height:170px; }
+  .legend{ display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; font-size:11.5px; color:var(--muted); }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
+
+  .table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:12px; }
+  .dash-table{ width:100%; border-collapse:collapse; font-size:12px; }
+  .dash-table th, .dash-table td{ padding:9px 11px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .dash-table th{ color:var(--dim); font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.02em; background:var(--panel2); }
+  .dash-table tbody tr{ cursor:pointer; }
+  .dash-table tbody tr:hover{ background:var(--panel2); }
+  .dash-table tbody tr.active-row{ background:var(--panel2); }
+  .dash-table tbody tr:last-child td{ border-bottom:none; }
+  .table-plate{ font-size:10.5px; color:var(--dim); font-family:var(--mono); }
+
+  .backup-box{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; }
+  .backup-desc{ font-size:12px; color:var(--muted); line-height:1.55; margin:0 0 12px; }
+  .backup-actions{ display:flex; gap:10px; }
+  .backup-btn{ flex:1; padding:10px; border-radius:8px; border:1px solid var(--border2); background:var(--panel2); color:var(--text); font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer; }
+  .backup-btn:hover{ border-color:var(--dim2); }
+  .import-msg{ font-size:11.5px; margin-top:10px; display:flex; align-items:center; gap:6px; }
+
+  @media (max-width:380px){
+    .stat-grid{ gap:6px; }
+    .odo-digits{ font-size:18px; }
+    .tab-btn{ font-size:10.5px; padding:8px 2px; gap:3px; }
+  }
+
+  /* ---------- celebração (missão / nível) ---------- */
+  .celebrate-overlay{
+    position:fixed; inset:0; z-index:999; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 40%, rgba(255,180,60,.25), rgba(0,0,0,.82) 70%);
+    overflow:hidden; animation:celebrateFadeIn .25s ease-out;
+  }
+  @keyframes celebrateFadeIn{ from{ opacity:0; } to{ opacity:1; } }
+  .confetti-layer{ position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+  .confetti-piece{
+    position:absolute; top:-12px; width:9px; height:14px; opacity:.95; border-radius:2px;
+    transform:rotate(var(--rot)); animation-name:confettiFall; animation-timing-function:ease-in;
+    animation-iteration-count:1; animation-fill-mode:forwards;
+  }
+  @keyframes confettiFall{
+    0%{ transform:translate(0,0) rotate(0deg); opacity:1; }
+    100%{ transform:translate(var(--drift), 115vh) rotate(calc(var(--rot) + 360deg)); opacity:.85; }
+  }
+  .celebrate-card{
+    position:relative; z-index:1; text-align:center; padding:34px 30px 26px; border-radius:26px;
+    background:linear-gradient(160deg, var(--amber), #ff6b6b 65%, #8338ec);
+    box-shadow:0 0 0 1px rgba(255,255,255,.15), 0 20px 60px rgba(0,0,0,.55), 0 0 90px rgba(255,180,60,.45);
+    max-width:340px; width:88%; animation:celebrateCardPop .55s cubic-bezier(.17,.89,.32,1.28);
+    cursor:default;
+  }
+  .celebrate-card.is-levelup{ background:linear-gradient(160deg, #8338ec, #118ab2 60%, #06d6a0); }
+  @keyframes celebrateCardPop{
+    0%{ transform:scale(.4) translateY(30px); opacity:0; }
+    60%{ transform:scale(1.08) translateY(-4px); opacity:1; }
+    100%{ transform:scale(1) translateY(0); opacity:1; }
+  }
+  .celebrate-burst{
+    position:absolute; inset:-40%; z-index:-1; border-radius:50%;
+    background:radial-gradient(circle, rgba(255,255,255,.5) 0%, rgba(255,255,255,0) 60%);
+    animation:celebratePulse 1.6s ease-out infinite;
+  }
+  @keyframes celebratePulse{
+    0%{ transform:scale(.6); opacity:.9; }
+    100%{ transform:scale(1.5); opacity:0; }
+  }
+  .celebrate-headline{
+    font-size:25px; font-weight:900; letter-spacing:.03em; color:#fff; text-transform:uppercase;
+    text-shadow:0 2px 10px rgba(0,0,0,.35); margin-bottom:14px; animation:celebrateShake .5s ease-in-out .1s;
+  }
+  @keyframes celebrateShake{
+    0%, 100%{ transform:rotate(0deg); }
+    20%{ transform:rotate(-3deg); }
+    40%{ transform:rotate(3deg); }
+    60%{ transform:rotate(-2deg); }
+    80%{ transform:rotate(2deg); }
+  }
+  .celebrate-mission{ display:flex; align-items:center; justify-content:center; gap:8px; color:#fff; font-size:15px; font-weight:700; margin-bottom:6px; }
+  .celebrate-xp{ font-size:32px; font-weight:900; color:#fff; text-shadow:0 2px 12px rgba(0,0,0,.4); animation:celebrateXpPop .5s cubic-bezier(.17,.89,.32,1.28) .15s both; }
+  .celebrate-level{ font-size:34px; font-weight:900; color:#fff; text-shadow:0 2px 12px rgba(0,0,0,.4); animation:celebrateXpPop .5s cubic-bezier(.17,.89,.32,1.28) .15s both; }
+  .celebrate-tier{ font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:rgba(255,255,255,.9); margin-top:2px; }
+  @keyframes celebrateXpPop{
+    0%{ transform:scale(.5); opacity:0; }
+    100%{ transform:scale(1); opacity:1; }
+  }
+  .celebrate-btn{
+    margin-top:20px; padding:12px 30px; border:none; border-radius:999px; cursor:pointer;
+    background:#fff; color:#222; font-size:14px; font-weight:800; letter-spacing:.02em;
+    box-shadow:0 6px 18px rgba(0,0,0,.3); animation:celebrateBtnPop .5s cubic-bezier(.17,.89,.32,1.28) .25s both;
+  }
+  .celebrate-btn:active{ transform:scale(.96); }
+  @keyframes celebrateBtnPop{
+    0%{ transform:scale(.6); opacity:0; }
+    100%{ transform:scale(1); opacity:1; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ---------- constants ---------- */
+const FUEL_TYPES = ['Gasolina','Aditivada','Etanol','Diesel','GNV'];
+const SERVICE_TYPES_ROTINA = ['Calibragem de pneu','Verificar nível de óleo','Verificar nível do fluido de arrefecimento','Limpeza'];
+const SERVICE_TYPES_PERIODICO = ['Troca de óleo e filtro','Troca de correia','Troca de cabo de vela','Ar condicionado','Troca de filtro do ar condicionado','Troca de embreagem','Troca de bateria','Troca do disco de freio','Troca da pastilha de freio','Alinhamento e Balanceamento','Troca do pneu'];
+const SERVICE_TYPES = SERVICE_TYPES_ROTINA.concat(SERVICE_TYPES_PERIODICO).concat(['Outro']);
+// Intervalos padrão (km) de senso comum, usados para pré-preencher e disparar os alertas de manutenção
+const DEFAULT_MAINTENANCE_INTERVALS = {
+  'Troca de óleo e filtro': 5000,
+  'Troca de correia': 50000,
+  'Troca de cabo de vela': 50000,
+  'Ar condicionado': 15000,
+  'Troca de filtro do ar condicionado': 15000,
+  'Troca de embreagem': 60000,
+  'Troca de bateria': 40000,
+  'Troca do disco de freio': 60000,
+  'Troca da pastilha de freio': 30000,
+  'Alinhamento e Balanceamento': 10000,
+  'Troca do pneu': 50000
+};
+function applyDefaultMaintenanceIntervals(){
+  if(!state.maintenanceIntervals) state.maintenanceIntervals = {};
+  SERVICE_TYPES_PERIODICO.forEach(function(service){
+    if(state.maintenanceIntervals[service] == null && DEFAULT_MAINTENANCE_INTERVALS[service] != null){
+      state.maintenanceIntervals[service] = DEFAULT_MAINTENANCE_INTERVALS[service];
+    }
+  });
+}
+const OCCURRENCE_TYPES = ['Batida','Pneu furado','Arranhões','Outro'];
+
+/* ---------- gamificação: missões e níveis ---------- */
+// Cada missão "casa" automaticamente com um lançamento (manutenção/abastecimento/ocorrência)
+// já existente no app. recurrence define o período de repetição da missão:
+//  - {type:'daily'}      -> reseta todo dia
+//  - {type:'days', value:N}  -> reseta a cada N dias (contados a partir do lançamento que a cumpriu)
+//  - {type:'km', value:N}   -> reseta a cada N km rodados
+const MISSIONS = [
+  { id:'diario-bordo', title:'Diário de bordo', icon:'calendar', xp:10,
+    recurrence:{type:'days', value:7}, trigger:'navigation',
+    matches:function(rec, type){ return false; } },
+  { id:'calibragem-pneu', title:'Calibragem dos pneus', icon:'gauge', xp:20,
+    recurrence:{type:'days', value:10},
+    matches:function(rec, type){ return type==='manutencao' && rec.description==='Calibragem de pneu'; } },
+  { id:'nivel-oleo', title:'Nível do óleo', icon:'droplet', xp:20,
+    recurrence:{type:'km', value:1000},
+    matches:function(rec, type){ return type==='manutencao' && rec.description==='Verificar nível de óleo'; } },
+  { id:'fluido-arrefecimento', title:'Fluido de arrefecimento', icon:'droplet', xp:15,
+    recurrence:{type:'days', value:30},
+    matches:function(rec, type){ return type==='manutencao' && rec.description==='Verificar nível do fluido de arrefecimento'; } },
+  { id:'limpeza', title:'Limpeza', icon:'car', xp:10,
+    recurrence:{type:'days', value:30},
+    matches:function(rec, type){ return type==='manutencao' && rec.description==='Limpeza'; } },
+  { id:'abastecimento-aditivada', title:'Abastecimento com aditivada', icon:'fuel', xp:15,
+    recurrence:{type:'days', value:30},
+    matches:function(rec, type){ return type==='combustivel' && rec.fuelType==='Aditivada'; } }
+];
+function dayNumber(dateStr){ return Math.floor(new Date(dateStr+'T00:00:00').getTime() / 86400000); }
+function periodKeyForMission(mission, record){
+  if(mission.recurrence.type==='daily') return record.date;
+  if(mission.recurrence.type==='days') return String(Math.floor(dayNumber(record.date) / mission.recurrence.value));
+  if(mission.recurrence.type==='km'){
+    var odo = Number(record.odometer);
+    if(isNaN(odo)) return null;
+    return String(Math.floor(odo / mission.recurrence.value));
+  }
+  return null;
+}
+// XP cumulativo necessário para alcançar um nível (nível 1 começa em 0 XP; cada nível fica um pouco mais difícil)
+function xpForLevel(level){
+  var total = 0;
+  for(var i=1;i<level;i++){ total += 100 + (i-1)*40; }
+  return total;
+}
+function getLevelInfo(xp){
+  xp = xp || 0;
+  var level = 1;
+  while(xpForLevel(level+1) <= xp && level < 200){ level++; }
+  var floorXp = xpForLevel(level);
+  var span = xpForLevel(level+1) - floorXp;
+  return { level:level, xpTotal:xp, xpIntoLevel:xp-floorXp, xpForNextLevel:span };
+}
+// Paleta de cores por faixa de nível — o visual do card de nível evolui conforme o usuário avança.
+function getLevelTier(level){
+  if(level>=30) return { name:'Lendário', gradient:'linear-gradient(135deg,#a855f7,#ec4899 55%,#f59e0b)' };
+  if(level>=20) return { name:'Diamante', gradient:'linear-gradient(135deg,#7dd3fc,#6366f1)' };
+  if(level>=15) return { name:'Platina', gradient:'linear-gradient(135deg,#5eead4,#0d9488)' };
+  if(level>=10) return { name:'Ouro', gradient:'linear-gradient(135deg,#fde68a,#f59e0b)' };
+  if(level>=5) return { name:'Prata', gradient:'linear-gradient(135deg,#e5e7eb,#94a3b8)' };
+  return { name:'Bronze', gradient:'linear-gradient(135deg,#e3a469,#a5672c)' };
+}
+// Registra automaticamente o cumprimento de missões quando um novo lançamento é salvo.
+// Cada (missão + veículo + período) só concede XP uma única vez.
+function evaluateMissionsForRecord(record, recordType){
+  if(!record || !record.vehicleId) return;
+  if(!state.gamification) state.gamification = { xp:0, completions:{} };
+  MISSIONS.forEach(function(mission){
+    if(!mission.matches(record, recordType)) return;
+    var pk = periodKeyForMission(mission, record);
+    if(pk==null) return;
+    var key = mission.id+'|'+record.vehicleId+'|'+pk;
+    if(!state.gamification.completions[key]){
+      var levelBefore = getLevelInfo(state.gamification.xp).level;
+      state.gamification.completions[key] = { date: record.date, xp: mission.xp };
+      state.gamification.xp = (state.gamification.xp||0) + mission.xp;
+      var levelAfter = getLevelInfo(state.gamification.xp).level;
+      queueCelebration({ type:'mission', title: mission.title, xp: mission.xp, icon: mission.icon });
+      if(levelAfter > levelBefore){
+        queueCelebration({ type:'levelup', level: levelAfter });
+      }
+    }
+  });
+}
+// Reverte o cumprimento de uma missão quando o registro que a justificava é excluído,
+// descontando o XP concedido — mas só se nenhum outro registro remanescente ainda a justificar.
+function revokeMissionsForRecord(record, recordType){
+  if(!record || !record.vehicleId) return;
+  if(!state.gamification || !state.gamification.completions) return;
+  var collection = recordType==='manutencao' ? state.maintenance
+    : (recordType==='combustivel' ? state.fuel : state.occurrences);
+  MISSIONS.forEach(function(mission){
+    if(!mission.matches(record, recordType)) return;
+    var pk = periodKeyForMission(mission, record);
+    if(pk==null) return;
+    var key = mission.id+'|'+record.vehicleId+'|'+pk;
+    var completion = state.gamification.completions[key];
+    if(!completion) return; // essa conquista nem existia — nada a reverter
+    var stillJustified = collection.some(function(r){
+      return r.vehicleId===record.vehicleId && mission.matches(r, recordType) && periodKeyForMission(mission, r)===pk;
+    });
+    if(!stillJustified){
+      var xpToRemove = completion.xp || mission.xp;
+      delete state.gamification.completions[key];
+      state.gamification.xp = Math.max(0, (state.gamification.xp||0) - xpToRemove);
+    }
+  });
+}
+function periodKeyNow(mission){
+  if(mission.recurrence.type==='daily') return new Date().toISOString().slice(0,10);
+  if(mission.recurrence.type==='days') return String(Math.floor(dayNumber(new Date().toISOString().slice(0,10)) / mission.recurrence.value));
+  return null;
+}
+function evaluateNavigationMissions(vehicleId){
+  if(!vehicleId) return;
+  if(!state.gamification) state.gamification = { xp:0, completions:{} };
+  MISSIONS.forEach(function(mission){
+    if(mission.trigger !== 'navigation') return;
+    var pk = periodKeyNow(mission);
+    if(pk==null) return;
+    var key = mission.id+'|'+vehicleId+'|'+pk;
+    if(!state.gamification.completions[key]){
+      var levelBefore = getLevelInfo(state.gamification.xp).level;
+      state.gamification.completions[key] = { date: new Date().toISOString().slice(0,10), xp: mission.xp };
+      state.gamification.xp = (state.gamification.xp||0) + mission.xp;
+      var levelAfter = getLevelInfo(state.gamification.xp).level;
+      queueCelebration({ type:'mission', title: mission.title, xp: mission.xp, icon: mission.icon });
+      if(levelAfter > levelBefore){
+        queueCelebration({ type:'levelup', level: levelAfter });
+      }
+    }
+  });
+}
+function computeMissionStatus(mission, vehicleId){
+  var records = state.maintenance.filter(function(m){return m.vehicleId===vehicleId;}).map(function(m){return {rec:m, type:'manutencao'};})
+    .concat(state.fuel.filter(function(f){return f.vehicleId===vehicleId;}).map(function(f){return {rec:f, type:'combustivel'};}))
+    .concat(state.occurrences.filter(function(o){return o.vehicleId===vehicleId;}).map(function(o){return {rec:o, type:'ocorrencia'};}));
+  var matching = records.filter(function(r){ return mission.matches(r.rec, r.type); });
+  var nowKey;
+  if(mission.recurrence.type==='daily'){
+    nowKey = new Date().toISOString().slice(0,10);
+  } else if(mission.recurrence.type==='days'){
+    nowKey = String(Math.floor(dayNumber(new Date().toISOString().slice(0,10)) / mission.recurrence.value));
+  } else if(mission.recurrence.type==='km'){
+    var stats = computeStatsForVehicle(vehicleId);
+    nowKey = String(Math.floor(stats.currentOdo / mission.recurrence.value));
+  }
+  var done = !!(state.gamification && state.gamification.completions[mission.id+'|'+vehicleId+'|'+nowKey]);
+  var lastMatch = matching.length ? matching.reduce(function(a,b){ return (!a || b.rec.date>a.rec.date) ? b : a; }, null) : null;
+  var subtitle;
+  if(mission.trigger==='navigation'){
+    subtitle = done ? 'Concluída neste período' : 'Basta abrir o app · repete a cada '+mission.recurrence.value+' dias';
+  } else if(mission.recurrence.type==='daily'){
+    subtitle = done ? 'Concluída hoje' : 'Ainda pendente hoje';
+  } else if(mission.recurrence.type==='days'){
+    if(done){ subtitle = 'Em dia neste período'; }
+    else if(lastMatch){
+      var daysAgo = Math.round((Date.now() - new Date(lastMatch.rec.date+'T00:00:00').getTime())/86400000);
+      subtitle = 'Última vez há '+daysAgo+' dia(s) · repete a cada '+mission.recurrence.value+' dias';
+    } else { subtitle = 'Nunca registrada · repete a cada '+mission.recurrence.value+' dias'; }
+  } else if(mission.recurrence.type==='km'){
+    if(done){ subtitle = 'Em dia neste período'; }
+    else if(lastMatch && !isNaN(Number(lastMatch.rec.odometer))){
+      var stats2 = computeStatsForVehicle(vehicleId);
+      var kmSince = Math.max(0, stats2.currentOdo - Number(lastMatch.rec.odometer));
+      subtitle = formatKm(kmSince)+' desde a última · repete a cada '+mission.recurrence.value.toLocaleString('pt-BR')+' km';
+    } else { subtitle = 'Nunca registrada · repete a cada '+mission.recurrence.value.toLocaleString('pt-BR')+' km'; }
+  }
+  return { done: done, subtitle: subtitle, xp: mission.xp };
+}
+
+const DATA_VERSION = 1;
+const STORAGE_KEY = 'controle-veiculo-data';
+function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
+function cssVar(name){
+  try{ return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || null; }
+  catch(e){ return null; }
+}
+const OUTRA_MARCA = 'Outra';
+const BRANDS = {
+  'Volkswagen': ['Gol','Voyage','Polo','Virtus','T-Cross','Nivus','Saveiro','Amarok','Fox','Up!','Jetta','Tiguan'],
+  'Chevrolet': ['Onix','Onix Plus','Prisma','Cruze','Tracker','S10','Spin','Cobalt','Montana','Equinox'],
+  'Fiat': ['Mobi','Argo','Cronos','Strada','Toro','Pulse','Fastback','Uno','Palio','Doblò'],
+  'Ford': ['Ka','Fiesta','Focus','EcoSport','Ranger','Territory','Fusion'],
+  'Toyota': ['Corolla','Corolla Cross','Etios','Yaris','Hilux','SW4','RAV4'],
+  'Honda': ['Civic','City','Fit','HR-V','WR-V','CR-V'],
+  'Hyundai': ['HB20','HB20S','Creta','Tucson','i30','Santa Fe'],
+  'Renault': ['Kwid','Sandero','Logan','Duster','Captur','Oroch'],
+  'Nissan': ['March','Versa','Kicks','Frontier','Sentra'],
+  'Jeep': ['Renegade','Compass','Commander'],
+  'Peugeot': ['208','2008','3008','408'],
+  'Citroën': ['C3','C4 Cactus','C4 Lounge'],
+  'Mitsubishi': ['L200','ASX','Outlander','Pajero'],
+  'Kia': ['Sportage','Cerato','Soul','Stonic'],
+  'BMW': ['Série 1','320i','X1','X3'],
+  'Mercedes-Benz': ['Classe A','Classe C','GLA'],
+  'Audi': ['A3','A4','Q3'],
+  'Volvo': ['XC40','XC60'],
+};
+const BRAND_LIST = Object.keys(BRANDS).concat([OUTRA_MARCA]);
+const OUTRO_MODELO = 'Outro modelo';
+const DEFAULT_TANK_CAPACITY = 50; // liters, fallback
+const TANK_CAPACITY = {
+  'Volkswagen': {'Gol':55,'Voyage':55,'Polo':52,'Virtus':52,'T-Cross':52,'Nivus':52,'Saveiro':55,'Amarok':80,'Fox':50,'Up!':50,'Jetta':55,'Tiguan':60},
+  'Chevrolet': {'Onix':44,'Onix Plus':44,'Prisma':44,'Cruze':60,'Tracker':46,'S10':76,'Spin':58,'Cobalt':55,'Montana':56,'Equinox':57},
+  'Fiat': {'Mobi':41,'Argo':48,'Cronos':48,'Strada':53,'Toro':60,'Pulse':47,'Fastback':47,'Uno':48,'Palio':48,'Doblò':60},
+  'Ford': {'Ka':47,'Fiesta':48,'Focus':55,'EcoSport':60,'Ranger':80,'Territory':52,'Fusion':62},
+  'Toyota': {'Corolla':50,'Corolla Cross':47,'Etios':43,'Yaris':42,'Hilux':80,'SW4':80,'RAV4':55},
+  'Honda': {'Civic':47,'City':40,'Fit':40,'HR-V':50,'WR-V':42,'CR-V':53},
+  'Hyundai': {'HB20':50,'HB20S':50,'Creta':50,'Tucson':62,'i30':53,'Santa Fe':67},
+  'Renault': {'Kwid':40,'Sandero':50,'Logan':50,'Duster':50,'Captur':50,'Oroch':50},
+  'Nissan': {'March':41,'Versa':50,'Kicks':50,'Frontier':80,'Sentra':50},
+  'Jeep': {'Renegade':60,'Compass':60,'Commander':60},
+  'Peugeot': {'208':44,'2008':53,'3008':53,'408':52},
+  'Citroën': {'C3':48,'C4 Cactus':50,'C4 Lounge':60},
+  'Mitsubishi': {'L200':75,'ASX':63,'Outlander':63,'Pajero':88},
+  'Kia': {'Sportage':62,'Cerato':50,'Soul':54,'Stonic':45},
+  'BMW': {'Série 1':52,'320i':59,'X1':51,'X3':65},
+  'Mercedes-Benz': {'Classe A':43,'Classe C':66,'GLA':43},
+  'Audi': {'A3':50,'A4':54,'Q3':60},
+  'Volvo': {'XC40':54,'XC60':71},
+};
+function getDefaultTankCapacity(brand, model){
+  if(TANK_CAPACITY[brand] && TANK_CAPACITY[brand][model]) return TANK_CAPACITY[brand][model];
+  return DEFAULT_TANK_CAPACITY;
+}
+const DEFAULT_GAUGE_DIVISIONS = 8; // nº de traços/segmentos entre E e F, usado para desenhar o marcador
+function getVehicleGaugeDivisions(vehicle){
+  var n = vehicle && vehicle.gaugeDivisions;
+  n = parseInt(n, 10);
+  return (n && n>=2) ? n : DEFAULT_GAUGE_DIVISIONS;
+}
+
+/* ---------- icons (inline svg, stroke=currentColor) ---------- */
+const ICONS = {
+  check:'<polyline points="20 6 9 17 4 12"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  gauge:'<path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12 8 9"/><path d="M12 2v2"/><path d="M2 12h2"/><path d="M22 12h-2"/>',
+  wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  fuel:'<line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2 2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/>',
+  plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  droplet:'<path d="M12 2.69s-5 5.4-5 9.14a5 5 0 0 0 10 0c0-3.73-5-9.14-5-9.14z"/>',
+  chevron:'<polyline points="9 18 15 12 9 6"/>',
+  dash:'<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  alert:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  file:'<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><polyline points="14 2 14 8 20 8"/>',
+  car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>',
+  carcrash:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M13.2 1.5l1.6 2.8-2.3.5 2.9 2-2 2.4"/>',
+  mappin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+  award:'<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>',
+  zap:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+};
+function icon(name, size, color, extra){
+  size = size || 16; color = color || 'currentColor'; extra = extra || '';
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="'+extra+'">'+ICONS[name]+'</svg>';
+}
+
+/* ---------- state ---------- */
+let state = {
+  maintenance: [],
+  fuel: [],
+  occurrences: [],
+  vehicles: [], // { id, plate, brand, model, color }
+  activeVehicleId: null,
+  maintenanceIntervals: Object.assign({}, DEFAULT_MAINTENANCE_INTERVALS), // { 'Troca de óleo e filtro': 10000, ... } km necessários entre repetições de cada manutenção periódica
+  tab: 'manutencao',
+  saving: false,
+  errorMsg: '',
+  importMsg: '',
+  pending: null,
+  gamification: { xp: 0, completions: {} }, // completions: { 'missionId|vehicleId|periodKey': {date, xp} }
+  locations: { manutencao: [], combustivel: [], ocorrencia: [] } // locais salvos por tema: { id, name, address }
+};
+let charts = {};
+let modal = null; // 'maintenance' | 'fuel' | 'vehicle' | 'vehicle-switch' | null
+let formPrefill = null; // holds entry data to re-populate a form after "Corrigir"
+let editingVehicleId = null; // null = creating a new vehicle in the vehicle form
+let fuelGaugeFraction = 0.5; // 0 (E) .. 1 (F), current pointer value while the fuel form is open
+let vehiclePhotoDraft = null; // base64 data URL of the vehicle photo being edited, null = none
+let editingFuelId = null; // null = creating a new fuel entry, otherwise the id being edited
+let editingMaintenanceId = null; // null = creating a new maintenance entry, otherwise the id being edited
+let editingOccurrenceId = null; // null = creating a new occurrence, otherwise the id being edited
+let awaitingAddressPaste = false; // true right after "find-address-maps" opens Google Maps, until the user returns to the app
+let capacityWarning = null; // { volBefore, volAfter, capacity, excess } when liters exceed tank capacity
+let dashFilterStart = ''; // dashboard period filter — start date (YYYY-MM-DD) or '' for no limit
+let dashFilterEnd = ''; // dashboard period filter — end date (YYYY-MM-DD) or '' for no limit
+let odoRollDelayTimer = null; // aguarda alguns segundos após salvar antes de iniciar o giro
+let pendingOdoRollAnimation = false; // sinaliza que o próximo render deve disparar a animação de rolagem
+function triggerOdoRoll(){
+  if(odoRollDelayTimer) clearTimeout(odoRollDelayTimer);
+  odoRollDelayTimer = setTimeout(function(){
+    pendingOdoRollAnimation = true;
+    render();
+  }, 2200);
+}
+var ODO_ROW_H = 24; // px — precisa bater com a altura de .odo-digit-row no CSS
+function odoStripHtml(digitValue){
+  // 3 ciclos de 0-9: o dígito de repouso fica no último ciclo, permitindo 2 voltas completas de giro antes de parar
+  var rows = '';
+  for(var c=0;c<3;c++){
+    for(var d=0;d<10;d++){ rows += '<span class="odo-digit-row">'+d+'</span>'; }
+  }
+  var targetIndex = 20 + digitValue;
+  var offset = -(targetIndex*ODO_ROW_H);
+  return '<span class="odo-digit"><span class="odo-digit-strip" data-target-offset="'+offset+'" style="transform:translateY('+offset+'px)">'+rows+'</span></span>';
+}
+function odoDigitsHtml(value){
+  var str = Math.max(0, Math.round(value||0)).toString();
+  while(str.length<6) str = '0'+str;
+  str = str.slice(-6);
+  return str.split('').map(function(ch){ return odoStripHtml(Number(ch)); }).join('');
+}
+let celebrationQueue = []; // fila de eventos de comemoração (missão concluída / subiu de nível) aguardando exibição
+let activeCelebration = null; // evento de comemoração exibido no momento, ou null
+const CONFETTI_COLORS = ['#ffd166','#ef476f','#06d6a0','#118ab2','#8338ec','#ff8fab','#ffbe0b'];
+
+/* ---------- celebração (missão concluída / nível subiu) ---------- */
+function queueCelebration(evt){
+  celebrationQueue.push(evt);
+  if(!activeCelebration) advanceCelebration();
+}
+function advanceCelebration(){
+  // não chama render() aqui: este ponto é sempre alcançado durante o fluxo de salvar um registro
+  // (evaluateMissionsForRecord/evaluateNavigationMissions), que já é seguido de perto por um persist()
+  // ou render() do chamador. Renderizar aqui também causava 2 renderizações extras e desnecessárias
+  // em sequência rápida, fazendo a foto do veículo "piscar" (some e reaparece) durante a comemoração.
+  activeCelebration = celebrationQueue.shift() || null;
+  if(activeCelebration && !activeCelebration.confetti){
+    activeCelebration.confetti = [];
+    for(var i=0;i<48;i++){
+      activeCelebration.confetti.push({
+        left: Math.random()*100,
+        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+        delay: (Math.random()*0.5).toFixed(2),
+        duration: (2.1 + Math.random()*1.3).toFixed(2),
+        rotate: Math.floor(Math.random()*360),
+        drift: Math.floor(Math.random()*80-40)
+      });
+    }
+    playCelebrationHorn();
+  }
+}
+function dismissCelebration(){ advanceCelebration(); render(); }
+
+/* buzinaço de comemoração — som sintetizado via Web Audio API, sem depender de arquivo externo */
+function playCelebrationHorn(){
+  try{
+    var AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if(!AudioCtx) return;
+    var ctx = new AudioCtx();
+    function honk(startTime, duration){
+      var osc1 = ctx.createOscillator();
+      var osc2 = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc1.type = 'sawtooth';
+      osc2.type = 'sawtooth';
+      osc1.frequency.value = 330; // tom grave clássico de buzina
+      osc2.frequency.value = 415; // segundo tom, levemente dissonante — imita buzinas de dois tons
+      gain.gain.setValueAtTime(0.0001, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.32, startTime+0.03);
+      gain.gain.setValueAtTime(0.32, Math.max(startTime+0.03, startTime+duration-0.05));
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime+duration);
+      osc1.connect(gain); osc2.connect(gain); gain.connect(ctx.destination);
+      osc1.start(startTime); osc2.start(startTime);
+      osc1.stop(startTime+duration); osc2.stop(startTime+duration);
+    }
+    var now = ctx.currentTime;
+    honk(now, 0.24);
+    honk(now+0.32, 0.24);
+    honk(now+0.64, 0.55);
+    setTimeout(function(){ ctx.close(); }, 1700);
+  }catch(e){ /* áudio indisponível ou bloqueado pelo navegador — segue sem som */ }
+}
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ---------- locais salvos (endereços) por tema: manutencao | combustivel | ocorrencia ---------- */
+function findLocationByAddress(category, address){
+  var list = (state.locations && state.locations[category]) || [];
+  var norm = (address||'').trim().toLowerCase();
+  if(!norm) return null;
+  for(var i=0;i<list.length;i++){
+    if((list[i].address||'').trim().toLowerCase()===norm) return list[i];
+  }
+  return null;
+}
+function findLocationById(category, id){
+  var list = (state.locations && state.locations[category]) || [];
+  for(var i=0;i<list.length;i++){ if(list[i].id===id) return list[i]; }
+  return null;
+}
+function locationDisplayName(category, address){
+  var addr = (address||'').trim();
+  if(!addr) return '';
+  var match = findLocationByAddress(category, addr);
+  return match ? match.name : addr;
+}
+function saveLocationIfNew(category, address, name){
+  if(!state.locations) state.locations = { manutencao:[], combustivel:[], ocorrencia:[] };
+  if(!state.locations[category]) state.locations[category] = [];
+  var addr = (address||'').trim();
+  if(!addr) return;
+  var existing = findLocationByAddress(category, addr);
+  if(existing){
+    if(name && name.trim() && existing.name !== name.trim()){ existing.name = name.trim(); }
+    return;
+  }
+  var finalName = (name && name.trim()) ? name.trim() : addr;
+  state.locations[category].push({ id: uid(), name: finalName, address: addr });
+}
+function resizeImageFile(file, maxDim, cb){
+  try{
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        var img = new Image();
+        img.onload = function(){
+          try{
+            var w = img.width, h = img.height;
+            var scale = Math.min(1, maxDim/Math.max(w,h));
+            var cw = Math.max(1, Math.round(w*scale)), ch = Math.max(1, Math.round(h*scale));
+            var canvas = document.createElement('canvas');
+            canvas.width = cw; canvas.height = ch;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, cw, ch);
+            var url = canvas.toDataURL('image/jpeg', 0.82);
+            cb(url, null);
+          }catch(err2){ cb(null, 'Falha ao processar a imagem (canvas): '+err2.message); }
+        };
+        img.onerror = function(){ cb(null, 'Não foi possível carregar a imagem selecionada.'); };
+        img.src = e.target.result;
+      }catch(err1){ cb(null, 'Falha ao ler a imagem: '+err1.message); }
+    };
+    reader.onerror = function(){ cb(null, 'Não foi possível acessar o arquivo selecionado.'); };
+    reader.readAsDataURL(file);
+  }catch(err0){ cb(null, 'Falha inesperada ao processar a foto: '+err0.message); }
+}
+function handlePhotoInputChange(e){
+  var file = e.target.files && e.target.files[0];
+  if(!file) return;
+  var wrapEarly = document.getElementById('v-photo-wrap');
+  resizeImageFile(file, 240, function(dataUrl, errMsg){
+    var wrap = document.getElementById('v-photo-wrap') || wrapEarly;
+    if(!dataUrl){
+      if(wrap){
+        var existingErr = wrap.parentNode.querySelector('.photo-err');
+        if(existingErr) existingErr.remove();
+        var errEl = document.createElement('p');
+        errEl.className = 'photo-err';
+        errEl.style.cssText = 'font-size:11px;color:var(--red);margin:6px 0 0;';
+        errEl.textContent = errMsg || 'Não foi possível carregar a foto. Tente novamente.';
+        wrap.parentNode.appendChild(errEl);
+      }
+      return;
+    }
+    vehiclePhotoDraft = dataUrl;
+    if(wrap){
+      var existingErr2 = wrap.parentNode.querySelector('.photo-err');
+      if(existingErr2) existingErr2.remove();
+      wrap.innerHTML = '<img class="photo-preview" src="'+dataUrl+'" alt="">' +
+        '<div class="photo-actions">' +
+          '<input type="file" id="v-photo-input" accept="image/*" class="native-file-input">' +
+          '<button type="button" class="photo-btn remove" id="v-remove-photo-btn">'+icon('x',13,'var(--red)')+' Remover</button>' +
+        '</div>';
+      document.getElementById('v-remove-photo-btn').addEventListener('click', function(){
+        vehiclePhotoDraft = null;
+        wrap.innerHTML = '<div class="photo-preview-placeholder">'+icon('car',22,'var(--dim2)')+'</div>' +
+          '<div class="photo-actions"><input type="file" id="v-photo-input" accept="image/*" class="native-file-input"></div>';
+        document.getElementById('v-photo-input').addEventListener('change', handlePhotoInputChange);
+      });
+      document.getElementById('v-photo-input').addEventListener('change', handlePhotoInputChange);
+    }
+  });
+}
+function formatBRL(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function formatKmInt(str){
+  var digits = String(str==null?'':str).replace(/\D/g,'');
+  if(digits==='') return '';
+  return parseInt(digits,10).toLocaleString('pt-BR');
+}
+function parseKmValue(str){
+  var digits = String(str==null?'':str).replace(/\D/g,'');
+  return digits==='' ? null : parseInt(digits,10);
+}
+function wireKmMask(el){
+  if(!el) return;
+  el.addEventListener('input', function(){
+    el.value = formatKmInt(el.value);
+  });
+}
+function toMaskedStr(num){
+  if(num==null || num==='' || isNaN(Number(num))) return '';
+  return Number(num).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function parseMasked(str){
+  if(!str) return 0;
+  var n = Number(String(str).replace(/\./g,'').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+function applyMoneyMask(el){
+  var digits = el.value.replace(/\D/g,'');
+  digits = digits.replace(/^0+(?=\d)/,'');
+  if(digits===''){ el.value=''; return; }
+  while(digits.length<3) digits = '0'+digits;
+  var intPart = digits.slice(0,-2).replace(/^0+(?=\d)/,'') || '0';
+  var decPart = digits.slice(-2);
+  intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  el.value = intPart+','+decPart;
+}
+function wireMoneyMask(id, onInput){
+  var el = document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('input', function(){
+    applyMoneyMask(el);
+    if(onInput) onInput();
+  });
+}
+function formatKm(v){ return Number(v||0).toLocaleString('pt-BR') + ' km'; }
+function formatMonthsDays(totalDays){
+  if(totalDays==null) return '';
+  var months = Math.floor(totalDays/30);
+  var days = totalDays%30;
+  if(months<=0) return days+(days===1?' dia':' dias');
+  if(days<=0) return months+(months===1?' mês':' meses');
+  return months+(months===1?' mês':' meses')+' e '+days+(days===1?' dia':' dias');
+}
+function formatDate(d){ if(!d) return '—'; var parts=d.split('-'); return parts[2]+'/'+parts[1]+'/'+parts[0]; }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+/* ---------- persistence ---------- */
+function load(){
+  try{
+    var raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      var parsed = JSON.parse(raw);
+      state.maintenance = parsed.maintenance || [];
+      state.fuel = parsed.fuel || [];
+      state.occurrences = parsed.occurrences || [];
+      state.maintenanceIntervals = parsed.maintenanceIntervals || {};
+      state.gamification = (parsed.gamification && typeof parsed.gamification==='object')
+        ? { xp: Number(parsed.gamification.xp)||0, completions: parsed.gamification.completions || {} }
+        : { xp: 0, completions: {} };
+      var loadedLocations = (parsed.locations && typeof parsed.locations==='object') ? parsed.locations : {};
+      state.locations = {
+        manutencao: Array.isArray(loadedLocations.manutencao) ? loadedLocations.manutencao : [],
+        combustivel: Array.isArray(loadedLocations.combustivel) ? loadedLocations.combustivel : [],
+        ocorrencia: Array.isArray(loadedLocations.ocorrencia) ? loadedLocations.ocorrencia : []
+      };
+      if(Array.isArray(parsed.vehicles)){
+        state.vehicles = parsed.vehicles;
+        state.activeVehicleId = parsed.activeVehicleId || (parsed.vehicles[0] && parsed.vehicles[0].id) || null;
+      } else if(parsed.vehicle && (parsed.vehicle.plate || parsed.vehicle.brand || parsed.vehicle.model)){
+        // migrate legacy single-vehicle format
+        var legacyId = uid();
+        state.vehicles = [Object.assign({}, parsed.vehicle, {id: legacyId})];
+        state.activeVehicleId = legacyId;
+        state.maintenance.forEach(function(m){ if(!m.vehicleId) m.vehicleId = legacyId; });
+        state.fuel.forEach(function(f){ if(!f.vehicleId) f.vehicleId = legacyId; });
+      }
+    }
+  }catch(e){ /* start empty */ }
+  applyDefaultMaintenanceIntervals();
+}
+function persist(){
+  state.saving = true;
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations }));
+    state.errorMsg = '';
+  }catch(e){
+    state.errorMsg = 'Não foi possível salvar. O armazenamento do navegador pode estar cheio ou bloqueado.';
+  }
+  state.saving = false;
+  render();
+}
+
+function getVehicleLabel(v){
+  if(!v) return 'Veículo';
+  var title = (v.brand || v.model) ? (v.brand+' '+v.model).trim() : (v.plate || 'Veículo sem nome');
+  return title;
+}
+
+function getVolumeAfter(entry, fallbackCapacity){
+  var cap = entry.tankCapacityAtEntry || fallbackCapacity || DEFAULT_TANK_CAPACITY;
+  if(entry.gaugeBefore!=null){
+    var before = entry.gaugeBefore * cap;
+    return Math.min(before + Number(entry.liters||0), cap);
+  }
+  if(entry.fullTank) return cap; // legacy entries saved before the gauge feature
+  return null; // legacy entry without gauge data — unknown tank level after fill
+}
+function getVolumeBefore(entry, fallbackCapacity){
+  var cap = entry.tankCapacityAtEntry || fallbackCapacity || DEFAULT_TANK_CAPACITY;
+  if(entry.gaugeBefore!=null) return entry.gaugeBefore * cap;
+  return null;
+}
+
+function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
+  var vehicle = state.vehicles.find(function(v){ return v.id===vehicleId; });
+  var vehicleCapacity = vehicle ? vehicle.tankCapacity : DEFAULT_TANK_CAPACITY;
+  var maint = state.maintenance.filter(function(m){ return m.vehicleId === vehicleId; });
+  var fuelList = state.fuel.filter(function(f){ return f.vehicleId === vehicleId; });
+  var occList = state.occurrences.filter(function(o){ return o.vehicleId === vehicleId; });
+  if(dateStart){ maint = maint.filter(function(m){return m.date>=dateStart;}); fuelList = fuelList.filter(function(f){return f.date>=dateStart;}); occList = occList.filter(function(o){return o.date>=dateStart;}); }
+  if(dateEnd){ maint = maint.filter(function(m){return m.date<=dateEnd;}); fuelList = fuelList.filter(function(f){return f.date<=dateEnd;}); occList = occList.filter(function(o){return o.date<=dateEnd;}); }
+
+  var totalManutencao = maint.reduce(function(s,m){return s+Number(m.cost||0);},0);
+  var totalCombustivel = fuelList.reduce(function(s,f){return s+Number(f.cost||0);},0);
+  var allOdo = maint.map(function(m){return Number(m.odometer);})
+    .concat(fuelList.map(function(f){return Number(f.odometer);}))
+    .filter(function(n){return !isNaN(n);});
+  var initOdo = (vehicle && vehicle.initialOdometer!=null && !isNaN(Number(vehicle.initialOdometer))) ? Number(vehicle.initialOdometer) : null;
+  var odoCandidates = allOdo.concat(initOdo!=null ? [initOdo] : []);
+  var currentOdo = odoCandidates.length ? Math.max.apply(null, odoCandidates) : 0;
+  var totalKmTraveled;
+  if(initOdo!=null){
+    totalKmTraveled = Math.max(0, currentOdo - initOdo);
+  } else {
+    totalKmTraveled = allOdo.length>=2 ? (Math.max.apply(null, allOdo) - Math.min.apply(null, allOdo)) : 0;
+  }
+
+  var recordsWithOdo = maint.concat(fuelList).filter(function(r){ return r.date && !isNaN(Number(r.odometer)); });
+  var firstRecord = recordsWithOdo.length ? recordsWithOdo.reduce(function(earliest,r){ return (!earliest || r.date<earliest.date) ? r : earliest; }, null) : null;
+  var avgKmPerDay = null;
+  if(firstRecord){
+    var firstDate = new Date(firstRecord.date+'T00:00:00');
+    var today = new Date(); today.setHours(0,0,0,0);
+    var daysSinceFirst = Math.max(1, Math.round((today - firstDate) / 86400000));
+    avgKmPerDay = Math.max(0, (currentOdo - Number(firstRecord.odometer)) / daysSinceFirst);
+  }
+
+  var fuelByOdo = fuelList.filter(function(f){return !isNaN(Number(f.odometer));}).slice().sort(function(a,b){return a.odometer-b.odometer;});
+  var totalKm=0, totalLitros=0;
+  var consumptionTrend = [];
+  for(var i=1;i<fuelByOdo.length;i++){
+    var prev = fuelByOdo[i-1], cur = fuelByOdo[i];
+    var dist = Number(cur.odometer) - Number(prev.odometer);
+    var volAfterPrev = getVolumeAfter(prev, vehicleCapacity);
+    var volBeforeCur = getVolumeBefore(cur, vehicleCapacity);
+    var consumed = (volAfterPrev!=null && volBeforeCur!=null) ? (volAfterPrev - volBeforeCur) : Number(cur.liters||0);
+    if(dist>0 && consumed>0){
+      totalKm += dist; totalLitros += consumed;
+      consumptionTrend.push({ label: formatDate(cur.date), kml: Number((dist/consumed).toFixed(2)) });
+    }
+  }
+  var avgConsumo = totalLitros>0 ? totalKm/totalLitros : null;
+
+  var lastKml = consumptionTrend.length ? consumptionTrend[consumptionTrend.length-1].kml : null;
+
+  var allDatesForDays = maint.map(function(m){return m.date;})
+    .concat(fuelList.map(function(f){return f.date;}))
+    .concat(occList.map(function(o){return o.date;}))
+    .filter(Boolean);
+  var lastRecordDate = allDatesForDays.length ? allDatesForDays.reduce(function(a,b){return b>a?b:a;}) : null;
+  var totalDaysUsed = null;
+  if(vehicle && vehicle.acquisitionDate && lastRecordDate){
+    var dAcq = new Date(vehicle.acquisitionDate+'T00:00:00');
+    var dLast = new Date(lastRecordDate+'T00:00:00');
+    totalDaysUsed = Math.max(0, Math.round((dLast - dAcq) / 86400000));
+  }
+
+  var monthMap = {};
+  maint.forEach(function(m){ var k=(m.date||'').slice(0,7); if(!k) return; monthMap[k]=monthMap[k]||{month:k,manutencao:0,combustivel:0}; monthMap[k].manutencao+=Number(m.cost||0); });
+  fuelList.forEach(function(f){ var k=(f.date||'').slice(0,7); if(!k) return; monthMap[k]=monthMap[k]||{month:k,manutencao:0,combustivel:0}; monthMap[k].combustivel+=Number(f.cost||0); });
+  var monthly = Object.keys(monthMap).map(function(k){return monthMap[k];}).sort(function(a,b){return a.month>b.month?1:-1;});
+
+  var serviceMap = {};
+  maint.forEach(function(m){ var k=m.description||'Outro'; serviceMap[k]=(serviceMap[k]||0)+Number(m.cost||0); });
+  var serviceBreakdown = Object.keys(serviceMap).map(function(name){return {name:name, value:serviceMap[name]};});
+
+  var totalOcorrencias = occList.length;
+  var totalCustoOcorrencias = occList.reduce(function(s,o){return s+Number(o.cost||0);},0);
+  var occMap = {};
+  occList.forEach(function(o){ var k=o.description||'Outro'; occMap[k]=(occMap[k]||0)+1; });
+  var occurrenceBreakdown = Object.keys(occMap).map(function(name){return {name:name, value:occMap[name]};});
+
+  var totalAllCosts = Number(totalManutencao||0) + Number(totalCombustivel||0) + Number(totalCustoOcorrencias||0);
+  var costPerDay = (totalDaysUsed && totalDaysUsed>0) ? (totalAllCosts/totalDaysUsed) : null;
+
+  return { totalManutencao:totalManutencao, totalCombustivel:totalCombustivel, currentOdo:currentOdo, totalKmTraveled:totalKmTraveled, avgKmPerDay:avgKmPerDay, avgConsumo:avgConsumo, lastKml:lastKml, monthly:monthly, serviceBreakdown:serviceBreakdown, consumptionTrend:consumptionTrend, totalOcorrencias:totalOcorrencias, totalCustoOcorrencias:totalCustoOcorrencias, occurrenceBreakdown:occurrenceBreakdown, totalDaysUsed:totalDaysUsed, costPerDay:costPerDay };
+}
+
+function computeStats(){
+  return computeStatsForVehicle(state.activeVehicleId);
+}
+
+function computeAllVehiclesSummary(dateStart, dateEnd){
+  return state.vehicles.map(function(v){
+    var s = computeStatsForVehicle(v.id, dateStart, dateEnd);
+    return {
+      id: v.id,
+      label: getVehicleLabel(v),
+      plate: v.plate,
+      currentOdo: s.currentOdo,
+      totalManutencao: s.totalManutencao,
+      totalCombustivel: s.totalCombustivel,
+      total: s.totalManutencao + s.totalCombustivel,
+      avgConsumo: s.avgConsumo,
+      lastKml: s.lastKml,
+      totalOcorrencias: s.totalOcorrencias,
+      totalCustoOcorrencias: s.totalCustoOcorrencias
+    };
+  });
+}
+
+function getLastRecord(vehicleId, excludeId){
+  var all = state.maintenance.filter(function(m){return m.vehicleId===vehicleId && m.id!==excludeId;})
+    .concat(state.fuel.filter(function(f){return f.vehicleId===vehicleId && f.id!==excludeId;}));
+  if(all.length===0) return null;
+  return all.reduce(function(latest,r){ return (!latest || r.date>latest.date) ? r : latest; }, null);
+}
+function violatesSequence(entry, excludeId){
+  var last = getLastRecord(state.activeVehicleId, excludeId);
+  if(!last) return null;
+  var issues=[];
+  if(entry.date < last.date) issues.push('data');
+  if(Number(entry.odometer) < Number(last.odometer)) issues.push('odômetro');
+  return issues.length ? issues : null;
+}
+
+function checkTankCapacity(entry, capacity){
+  if(entry.gaugeBefore==null || !capacity) return null;
+  var volBefore = entry.gaugeBefore * capacity;
+  var volAfter = volBefore + Number(entry.liters||0);
+  if(volAfter > capacity + 0.01){
+    return { volBefore: volBefore, volAfter: volAfter, capacity: capacity, excess: volAfter - capacity };
+  }
+  return null;
+}
+
+/* ---------- mutations ---------- */
+function commitMaintenance(entry, editId){
+  var finalRecord;
+  if(editId){
+    state.maintenance = state.maintenance.map(function(m){
+      if(m.id===editId){ finalRecord = Object.assign({}, entry, {id:editId, vehicleId:m.vehicleId}); return finalRecord; }
+      return m;
+    }).sort(function(a,b){return a.date<b.date?1:-1;});
+  } else {
+    finalRecord = Object.assign({}, entry, {id:uid(), vehicleId: state.activeVehicleId});
+    state.maintenance = state.maintenance.concat([finalRecord]).sort(function(a,b){return a.date<b.date?1:-1;});
+  }
+  evaluateMissionsForRecord(finalRecord, 'manutencao');
+  persist();
+}
+function commitFuel(entry, editId){
+  var finalRecord;
+  if(editId){
+    state.fuel = state.fuel.map(function(f){
+      if(f.id===editId){ finalRecord = Object.assign({}, entry, {id:editId, vehicleId:f.vehicleId}); return finalRecord; }
+      return f;
+    }).sort(function(a,b){return a.date<b.date?1:-1;});
+  } else {
+    finalRecord = Object.assign({}, entry, {id:uid(), vehicleId: state.activeVehicleId});
+    state.fuel = state.fuel.concat([finalRecord]).sort(function(a,b){return a.date<b.date?1:-1;});
+  }
+  evaluateMissionsForRecord(finalRecord, 'combustivel');
+  persist();
+}
+function addMaintenance(entry, editId){
+  var issues = violatesSequence(entry, editId);
+  if(issues){ state.pending = {kind:'manutencao', entry:entry, issues:issues, editId:editId}; formPrefill = entry; return true; }
+  commitMaintenance(entry, editId);
+  return false;
+}
+function addFuel(entry, editId){
+  var issues = violatesSequence(entry, editId);
+  if(issues){ state.pending = {kind:'abastecimento', entry:entry, issues:issues, editId:editId}; formPrefill = entry; return true; }
+  commitFuel(entry, editId);
+  return false;
+}
+function confirmPending(){
+  if(!state.pending) return;
+  if(state.pending.kind==='manutencao') commitMaintenance(state.pending.entry, state.pending.editId);
+  else commitFuel(state.pending.entry, state.pending.editId);
+  state.pending = null;
+  formPrefill = null;
+  modal = null;
+  editingFuelId = null;
+  editingMaintenanceId = null;
+}
+function cancelPending(){ state.pending = null; render(); }
+function removeMaintenance(id){
+  var removed = state.maintenance.find(function(m){return m.id===id;});
+  state.maintenance = state.maintenance.filter(function(m){return m.id!==id;});
+  if(removed) revokeMissionsForRecord(removed, 'manutencao');
+  persist();
+}
+function removeFuel(id){
+  var removedFuel = state.fuel.find(function(f){return f.id===id;});
+  state.fuel = state.fuel.filter(function(f){return f.id!==id;});
+  if(removedFuel) revokeMissionsForRecord(removedFuel, 'combustivel');
+  persist();
+}
+
+function commitOccurrence(entry, editId){
+  var finalRecord;
+  if(editId){
+    state.occurrences = state.occurrences.map(function(o){
+      if(o.id===editId){ finalRecord = Object.assign({}, entry, {id:editId, vehicleId:o.vehicleId}); return finalRecord; }
+      return o;
+    }).sort(function(a,b){return a.date<b.date?1:-1;});
+  } else {
+    finalRecord = Object.assign({}, entry, {id:uid(), vehicleId: state.activeVehicleId});
+    state.occurrences = state.occurrences.concat([finalRecord]).sort(function(a,b){return a.date<b.date?1:-1;});
+  }
+  evaluateMissionsForRecord(finalRecord, 'ocorrencia');
+  persist();
+}
+function addOccurrence(entry, editId){ commitOccurrence(entry, editId); }
+function removeOccurrence(id){
+  var removedOcc = state.occurrences.find(function(o){return o.id===id;});
+  state.occurrences = state.occurrences.filter(function(o){return o.id!==id;});
+  if(removedOcc) revokeMissionsForRecord(removedOcc, 'ocorrencia');
+  persist();
+}
+
+function addVehicle(v){
+  var newVehicle = Object.assign({tankCapacity: getDefaultTankCapacity(v.brand, v.model)}, v, {id: uid()});
+  state.vehicles = state.vehicles.concat([newVehicle]);
+  state.activeVehicleId = newVehicle.id;
+  persist();
+}
+function updateVehicle(id, v){
+  state.vehicles = state.vehicles.map(function(x){ return x.id===id ? Object.assign({}, v, {id:id}) : x; });
+  persist();
+}
+function deleteVehicle(id){
+  state.vehicles = state.vehicles.filter(function(v){ return v.id!==id; });
+  state.maintenance = state.maintenance.filter(function(m){ return m.vehicleId!==id; });
+  state.fuel = state.fuel.filter(function(f){ return f.vehicleId!==id; });
+  state.occurrences = state.occurrences.filter(function(o){ return o.vehicleId!==id; });
+  if(state.activeVehicleId === id){
+    state.activeVehicleId = state.vehicles.length ? state.vehicles[0].id : null;
+  }
+  persist();
+}
+function selectVehicle(id){
+  state.activeVehicleId = id;
+  evaluateNavigationMissions(id);
+  persist();
+}
+
+/* ---------- export / import ---------- */
+function exportData(){
+  var payload = {
+    appData:'controle-veiculo', version:DATA_VERSION, exportedAt:new Date().toISOString(),
+    vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, locations: state.locations
+  };
+  var blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'controle-veiculo-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function triggerImport(){
+  state.importMsg = '';
+  document.getElementById('import-input').click();
+}
+function handleImportFile(e){
+  var file = e.target.files && e.target.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(){
+    try{
+      var parsed = JSON.parse(reader.result);
+      if(!Array.isArray(parsed.maintenance) || !Array.isArray(parsed.fuel)){
+        state.importMsg = 'Arquivo inválido: formato não reconhecido.';
+        render(); return;
+      }
+      state.maintenance = parsed.maintenance.map(function(m){ return Object.assign({}, m, {id:m.id||uid()}); });
+      state.fuel = parsed.fuel.map(function(f){ return Object.assign({}, f, {id:f.id||uid()}); });
+      state.occurrences = Array.isArray(parsed.occurrences) ? parsed.occurrences.map(function(o){ return Object.assign({}, o, {id:o.id||uid()}); }) : [];
+      var importedLocations = (parsed.locations && typeof parsed.locations==='object') ? parsed.locations : {};
+      state.locations = {
+        manutencao: Array.isArray(importedLocations.manutencao) ? importedLocations.manutencao : [],
+        combustivel: Array.isArray(importedLocations.combustivel) ? importedLocations.combustivel : [],
+        ocorrencia: Array.isArray(importedLocations.ocorrencia) ? importedLocations.ocorrencia : []
+      };
+      if(Array.isArray(parsed.vehicles)){
+        state.vehicles = parsed.vehicles.map(function(v){ return Object.assign({}, v, {id:v.id||uid()}); });
+        state.activeVehicleId = parsed.activeVehicleId || (state.vehicles[0] && state.vehicles[0].id) || null;
+      } else if(parsed.vehicle){
+        var legacyId = uid();
+        state.vehicles = [Object.assign({}, parsed.vehicle, {id: legacyId})];
+        state.activeVehicleId = legacyId;
+        state.maintenance.forEach(function(m){ if(!m.vehicleId) m.vehicleId = legacyId; });
+        state.fuel.forEach(function(f){ if(!f.vehicleId) f.vehicleId = legacyId; });
+      }
+      state.importMsg = 'Importado: '+state.vehicles.length+' veículo(s), '+state.maintenance.length+' manutenções, '+state.fuel.length+' abastecimentos, '+state.occurrences.length+' ocorrências.';
+      persist();
+    }catch(err){
+      state.importMsg = 'Não foi possível ler o arquivo. Verifique se é um export válido deste app.';
+      render();
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/* ---------- modal ---------- */
+function openModal(name){ modal = name; formPrefill = null; render(); }
+function closeModal(){ modal = null; formPrefill = null; state.pending = null; editingVehicleId = null; vehiclePhotoDraft = null; editingFuelId = null; editingMaintenanceId = null; editingOccurrenceId = null; capacityWarning = null; render(); }
+
+/* ---------- render ---------- */
+function render(){
+  var app = document.getElementById('app');
+  var stats = computeStats();
+  var dashboardStats = state.tab==='dashboard' ? computeStatsForVehicle(state.activeVehicleId, dashFilterStart, dashFilterEnd) : null;
+  var html = '';
+  html += renderHeader(stats);
+  html += renderTabs();
+  html += '<div class="content">'+renderContent(stats, dashboardStats)+'</div>';
+  html += (state.tab !== 'dashboard' && state.tab !== 'missoes' && state.activeVehicleId) ? renderFAB() : '';
+  html += (modal==='maintenance') ? renderMaintenanceForm() : '';
+  html += (modal==='fuel') ? renderFuelForm() : '';
+  html += (modal==='occurrence') ? renderOccurrenceForm() : '';
+  html += (modal==='vehicle') ? renderVehicleForm() : '';
+  html += (modal==='vehicle-switch') ? renderVehicleSwitch() : '';
+  html += (modal==='settings') ? renderSettingsModal() : '';
+  html += (state.pending) ? renderWarning() : '';
+  html += (capacityWarning) ? renderCapacityWarning() : '';
+  html += (activeCelebration) ? renderCelebration() : '';
+  html += '<input type="file" id="import-input" accept="application/json" style="display:none">';
+  app.innerHTML = html;
+  attachEvents();
+  if(state.tab==='dashboard') renderCharts(dashboardStats);
+}
+
+function renderHeader(stats){
+  var v = state.vehicles.find(function(x){ return x.id === state.activeVehicleId; });
+  var title = v ? getVehicleLabel(v) : (state.vehicles.length ? 'Selecione um veículo' : 'Painel do Veículo');
+  var sub = v ? [v.plate, v.color].filter(Boolean).join(' · ') : '';
+  var photoHtml = (v && v.photo)
+    ? '<img class="vehicle-photo" src="'+v.photo+'" alt="Foto do veículo">'
+    : '<div class="vehicle-photo-placeholder">'+icon('car',34,'var(--dim2)')+'</div>';
+  var currentOdoRounded = Math.round(stats.currentOdo||0);
+  var digits = odoDigitsHtml(currentOdoRounded);
+  var actionBtn = state.vehicles.length===0
+    ? '<button class="btn-ghost" data-action="add-vehicle">'+icon('car',12)+' Adicionar veículo</button>'
+    : '<button class="btn-ghost" data-action="open-vehicle-switch">'+icon('car',12)+' Trocar veículo</button>';
+  var maintAlerts = state.activeVehicleId ? computeMaintenanceAlerts(state.activeVehicleId, stats.currentOdo) : [];
+  var alertsHtml = '';
+  if(maintAlerts.length){
+    alertsHtml = '<div class="maint-alert-banner">' + maintAlerts.map(function(a){
+      var msg = a.overdue
+        ? 'Vencida há '+formatKm(Math.abs(a.remaining))
+        : 'Faltam '+formatKm(a.remaining)+' para vencer';
+      return '<div class="maint-alert-item '+(a.overdue?'overdue':'')+'">' +
+        icon('alert',14, a.overdue?'var(--red)':'var(--amber)') +
+        '<div class="maint-alert-txt"><strong>'+esc(a.service)+'</strong><span>'+msg+' · próxima aos '+formatKm(a.nextDueKm)+'</span></div>' +
+      '</div>';
+    }).join('') + '</div>';
+  }
+  return '' +
+  '<div class="header">' +
+    '<div class="header-top">' +
+      '<div class="header-id">' +
+        photoHtml +
+        '<div class="txt">' +
+          '<h1>'+esc(title)+'</h1>' +
+          (sub ? '<p>'+esc(sub)+'</p>' : '') +
+          '<div class="header-actions-row">' +
+            (state.saving ? '<span class="saving-tag">salvando…</span>' : '') +
+            actionBtn +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<button class="icon-btn" data-action="open-settings" aria-label="Configurações">'+icon('settings',14)+'</button>' +
+    '</div>' +
+    '<div class="odo-usage-row">' +
+      '<div class="odo-card">' +
+        '<div class="odo-label">Odômetro atual</div>' +
+        '<span class="odo-digits">'+digits+'<span class="odo-suffix">km</span></span>' +
+        '<div class="odo-divider"></div>' +
+        '<div class="odo-label">Km percorrido</div>' +
+        '<div class="consumo-val">'+formatKm(stats.totalKmTraveled)+'</div>' +
+      '</div>' +
+      '<div class="usage-card">' +
+        '<div class="odo-label">Média km/dia</div>' +
+        '<div class="consumo-val">'+(stats.avgKmPerDay!=null ? stats.avgKmPerDay.toLocaleString('pt-BR',{maximumFractionDigits:1})+' km' : '—')+'</div>' +
+        (stats.totalDaysUsed!=null ? '<div class="consumo-sub">'+formatMonthsDays(stats.totalDaysUsed)+' no total</div>' : '') +
+        (stats.costPerDay!=null ? '<div class="consumo-sub">'+formatBRL(stats.costPerDay)+'/dia (todos os custos)</div>' : '') +
+      '</div>' +
+    '</div>' +
+    alertsHtml +
+    '<div class="stat-grid">' +
+      '<div class="stat-card">' +
+        '<div class="stat-head">'+icon('wrench',12,'var(--amber)')+'<span>Manutenção</span></div>' +
+        '<div class="stat-val">'+formatBRL(stats.totalManutencao)+'</div>' +
+      '</div>' +
+      '<div class="stat-card">' +
+        '<div class="stat-head">'+icon('fuel',12,'var(--teal)')+'<span>Combustível</span></div>' +
+        '<div class="stat-val">'+formatBRL(stats.totalCombustivel)+'</div>' +
+      '</div>' +
+      '<div class="stat-card">' +
+        '<div class="stat-head">'+icon('gauge',12,'var(--muted)')+'<span>Último km/l</span></div>' +
+        '<div class="stat-val">'+(stats.lastKml!=null ? stats.lastKml.toFixed(1)+' km/l' : '—')+'</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderTabs(){
+  var tabs = [
+    {key:'manutencao', label:'Manutenção', ic:'wrench', color:'var(--amber)'},
+    {key:'abastecimento', label:'Abastecimento', ic:'fuel', color:'var(--teal)'},
+    {key:'ocorrencias', label:'Ocorrências', ic:'alert', color:'var(--red)'},
+    {key:'missoes', label:'Missões', ic:'award', color:'var(--amber)'},
+    {key:'dashboard', label:'Dashboard', ic:'dash', color:'var(--muted)'}
+  ];
+  var html = '<div class="tabs">';
+  tabs.forEach(function(t){
+    html += '<button class="tab-btn '+(state.tab===t.key?'active':'')+'" data-action="set-tab" data-tab="'+t.key+'">'+
+      icon(t.ic,14, state.tab===t.key ? t.color : 'var(--dim)')+' <span class="tab-label">'+t.label+'</span></button>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderContent(stats, dashboardStats){
+  if(state.tab==='dashboard') return renderDashboard(dashboardStats);
+  if(state.tab==='manutencao') return renderMaintenanceList();
+  if(state.tab==='ocorrencias') return renderOccurrenceList();
+  if(state.tab==='missoes') return renderMissions();
+  return renderFuelList();
+}
+
+function renderMissions(){
+  if(!state.activeVehicleId){
+    return '<div class="empty">' +
+      '<div class="empty-icon">'+icon('car',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhum veículo cadastrado</p>' +
+      '<p class="empty-sub">Cadastre um veículo para começar a cumprir missões.</p>' +
+    '</div>';
+  }
+  if(!state.gamification) state.gamification = { xp:0, completions:{} };
+  var lvl = getLevelInfo(state.gamification.xp||0);
+  var tier = getLevelTier(lvl.level);
+  var pct = lvl.xpForNextLevel>0 ? Math.min(100, Math.round((lvl.xpIntoLevel/lvl.xpForNextLevel)*100)) : 100;
+  var html = '';
+  html += '<div class="level-card">' +
+      '<div class="level-top">' +
+        '<div class="level-badge" style="background:'+tier.gradient+'">'+icon('award',20,'#fff')+'</div>' +
+        '<div class="level-info">' +
+          '<div class="level-title">Nível '+lvl.level+' <span class="level-tier-tag" style="background:'+tier.gradient+'">'+esc(tier.name)+'</span></div>' +
+          '<div class="level-sub">'+icon('zap',11,'var(--amber)')+' '+lvl.xpTotal.toLocaleString('pt-BR')+' XP no total</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="level-bar"><div class="level-bar-fill" style="width:'+pct+'%; background:'+tier.gradient+'"></div></div>' +
+      '<div class="level-bar-label">'+lvl.xpIntoLevel+' / '+lvl.xpForNextLevel+' XP para o nível '+(lvl.level+1)+'</div>' +
+    '</div>';
+  html += '<div class="mission-list">';
+  MISSIONS.forEach(function(mission){
+    var status = computeMissionStatus(mission, state.activeVehicleId);
+    html += '<div class="mission-card'+(status.done?' done':'')+'">' +
+        '<div class="mission-icon'+(status.done?' done':'')+'">'+icon(mission.icon,16,status.done?'var(--on-accent)':'var(--muted)')+'</div>' +
+        '<div class="mission-body">' +
+          '<div class="mission-title">'+esc(mission.title)+'</div>' +
+          '<div class="mission-desc">'+esc(status.subtitle)+'</div>' +
+        '</div>' +
+        '<div class="mission-xp'+(status.done?' done':'')+'">'+(status.done ? icon('check',16,'var(--teal)') : '+'+mission.xp+' XP')+'</div>' +
+      '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderMaintenanceList(){
+  var errHtml = state.errorMsg ? '<p class="err-msg">'+esc(state.errorMsg)+'</p>' : '';
+  if(!state.activeVehicleId){
+    return '<div class="empty">' +
+      '<div class="empty-icon">'+icon('car',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhum veículo selecionado</p>' +
+      '<p class="empty-sub">Adicione ou selecione um veículo no topo da tela</p>' +
+    '</div>' + errHtml;
+  }
+  var items = state.maintenance.filter(function(m){ return m.vehicleId === state.activeVehicleId; });
+  if(items.length===0){
+    return '<div class="empty">' +
+      '<div class="empty-icon">'+icon('wrench',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhuma manutenção registrada</p>' +
+      '<p class="empty-sub">Toque em + para adicionar o primeiro serviço</p>' +
+    '</div>' + errHtml;
+  }
+  var html = '<div class="list">';
+  items.forEach(function(m){
+    html += '<div class="card">' +
+      '<div class="card-main">' +
+        '<div class="card-title">'+esc(m.description||'Serviço')+'</div>' +
+        '<div class="card-meta">' +
+          '<span>'+icon('calendar',11)+' '+formatDate(m.date)+'</span>' +
+          '<span>'+icon('gauge',11)+' '+formatKm(m.odometer)+'</span>' +
+        '</div>' +
+        (m.address ? '<div class="card-meta"><span>'+icon('mappin',11)+' '+esc(locationDisplayName('manutencao', m.address))+'</span></div>' : '') +
+        (m.warrantyMonths ? '<div class="card-meta"><span>'+icon('check',11)+' Garantia: '+esc(m.warrantyMonths)+(m.warrantyMonths===1?' mês':' meses')+'</span></div>' : '') +
+        (m.notes ? '<p class="card-notes">'+esc(m.notes)+'</p>' : '') +
+      '</div>' +
+      '<div class="card-side">' +
+        '<span class="card-cost" style="color:var(--amber)">'+formatBRL(m.cost)+'</span>' +
+        '<button class="card-del" data-action="edit-maintenance" data-id="'+m.id+'" style="color:var(--muted)">'+icon('wrench',14)+'</button>' +
+        '<button class="card-del" data-action="del-maintenance" data-id="'+m.id+'">'+icon('x',15)+'</button>' +
+      '</div>' +
+    '</div>';
+  });
+  html += '</div>' + errHtml;
+  return html;
+}
+
+function renderOccurrenceList(){
+  if(!state.activeVehicleId){
+    return '<div class="empty">' +
+      '<div class="empty-icon">'+icon('car',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhum veículo selecionado</p>' +
+      '<p class="empty-sub">Adicione ou selecione um veículo no topo da tela</p>' +
+    '</div>';
+  }
+  var items = state.occurrences.filter(function(o){ return o.vehicleId === state.activeVehicleId; });
+  if(items.length===0){
+    return '<div class="empty">' +
+      '<div class="empty-icon">'+icon('alert',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhuma ocorrência registrada</p>' +
+      '<p class="empty-sub">Toque em + para registrar uma batida, furo ou avaria</p>' +
+    '</div>';
+  }
+  var html = '<div class="list">';
+  items.forEach(function(o){
+    html += '<div class="card">' +
+      '<div class="card-main">' +
+        '<div class="card-title">'+esc(o.description||'Ocorrência')+'</div>' +
+        '<div class="card-meta">' +
+          '<span>'+icon('calendar',11)+' '+formatDate(o.date)+'</span>' +
+          (o.odometer!=null && o.odometer!=='' ? '<span>'+icon('gauge',11)+' '+formatKm(o.odometer)+'</span>' : '') +
+        '</div>' +
+        (o.address ? '<div class="card-meta"><span>'+icon('mappin',11)+' '+esc(locationDisplayName('ocorrencia', o.address))+'</span></div>' : '') +
+        (o.notes ? '<p class="card-notes">'+esc(o.notes)+'</p>' : '') +
+      '</div>' +
+      '<div class="card-side">' +
+        (o.cost ? '<span class="card-cost" style="color:var(--red)">'+formatBRL(o.cost)+'</span>' : '') +
+        '<button class="card-del" data-action="edit-occurrence" data-id="'+o.id+'" style="color:var(--muted)">'+icon('wrench',14)+'</button>' +
+        '<button class="card-del" data-action="del-occurrence" data-id="'+o.id+'">'+icon('x',15)+'</button>' +
+      '</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderFuelList(){
+  var errHtml = state.errorMsg ? '<p class="err-msg">'+esc(state.errorMsg)+'</p>' : '';
+  if(!state.activeVehicleId){
+    return '<div class="empty">' +
+      '<div class="empty-icon">'+icon('car',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhum veículo selecionado</p>' +
+      '<p class="empty-sub">Adicione ou selecione um veículo no topo da tela</p>' +
+    '</div>' + errHtml;
+  }
+  var items = state.fuel.filter(function(f){ return f.vehicleId === state.activeVehicleId; });
+  if(items.length===0){
+    return '<div class="empty">' +
+      '<div class="empty-icon">'+icon('fuel',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhum abastecimento registrado</p>' +
+      '<p class="empty-sub">Toque em + para adicionar o primeiro abastecimento</p>' +
+    '</div>' + errHtml;
+  }
+  var html = '<div class="list">';
+  items.forEach(function(f){
+    html += '<div class="card">' +
+      '<div class="card-main">' +
+        '<div class="card-title">'+icon('droplet',12,'var(--teal)')+' '+esc(f.fuelType||'Combustível')+'</div>' +
+        '<div class="card-meta">' +
+          '<span>'+icon('calendar',11)+' '+formatDate(f.date)+'</span>' +
+          '<span>'+icon('gauge',11)+' '+formatKm(f.odometer)+'</span>' +
+          '<span>'+(f.liters ? Number(f.liters).toLocaleString('pt-BR')+' L' : '')+'</span>' +
+        '</div>' +
+        (f.address ? '<div class="card-meta"><span>'+icon('mappin',11)+' '+esc(locationDisplayName('combustivel', f.address))+'</span></div>' : '') +
+      '</div>' +
+      '<div class="card-side">' +
+        '<span class="card-cost" style="color:var(--teal)">'+formatBRL(f.cost)+'</span>' +
+        '<button class="card-del" data-action="edit-fuel" data-id="'+f.id+'" style="color:var(--muted)">'+icon('wrench',14)+'</button>' +
+        '<button class="card-del" data-action="del-fuel" data-id="'+f.id+'">'+icon('x',15)+'</button>' +
+      '</div>' +
+    '</div>';
+  });
+  html += '</div>' + errHtml;
+  return html;
+}
+
+function renderDashboard(stats){
+  var activeVehicle = state.vehicles.find(function(x){ return x.id === state.activeVehicleId; });
+  var hasData = activeVehicle && (stats.monthly.length>0 || stats.totalOcorrencias>0);
+  var html = '<div class="dash-section" style="display:flex; flex-direction:column; gap:20px;">';
+
+  if(!activeVehicle){
+    html += '<div class="empty">' +
+      '<div class="empty-icon">'+icon('car',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhum veículo selecionado</p>' +
+      '<p class="empty-sub">Adicione ou selecione um veículo no topo da tela</p>' +
+    '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  html += '<div>' +
+    '<h3>Filtrar por período</h3>' +
+    '<div class="dash-filter">' +
+      '<div class="field-row">' +
+        fieldHtml('De', '<input type="date" id="dash-filter-start" value="'+esc(dashFilterStart)+'">') +
+        fieldHtml('Até', '<input type="date" id="dash-filter-end" value="'+esc(dashFilterEnd)+'">') +
+      '</div>' +
+      '<div class="dash-filter-actions">' +
+        '<button class="dash-filter-btn" data-action="clear-dash-filter">Limpar</button>' +
+        '<button class="dash-filter-btn primary" data-action="apply-dash-filter">Filtrar</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  if(!hasData){
+    html += '<div class="empty">' +
+      '<div class="empty-icon">'+icon('dash',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Ainda não há dados suficientes</p>' +
+      '<p class="empty-sub">'+((dashFilterStart||dashFilterEnd) ? 'Nenhum registro encontrado no período selecionado' : 'Adicione manutenções, abastecimentos ou ocorrências para ver o dashboard deste veículo')+'</p>' +
+    '</div>';
+  } else {
+    if(stats.monthly.length>0){
+      html += '<div><h3>Gastos por mês — '+esc(getVehicleLabel(activeVehicle))+'</h3><div class="dash-card">'+(window.Chart ? '<canvas id="chart-monthly"></canvas>' : '<p class="empty-sub" style="padding:16px">Não foi possível carregar a biblioteca de gráficos. Verifique sua conexão com a internet e recarregue a página.</p>')+'</div></div>';
+    }
+    if(stats.consumptionTrend.length>0){
+      html += '<div><h3>Consumo (km/l) por abastecimento</h3><div class="dash-card short"><canvas id="chart-consumption"></canvas></div></div>';
+    }
+    if(stats.serviceBreakdown.length>0){
+      html += '<div><h3>Gastos por tipo de serviço</h3><div class="dash-card"><canvas id="chart-services"></canvas></div>' +
+        '<div class="legend">' + stats.serviceBreakdown.map(function(s,i){
+          var cc = chartColors();
+          return '<span><span class="dot" style="background:'+cc[i%cc.length]+'"></span>'+esc(s.name)+'</span>';
+        }).join('') + '</div>' +
+      '</div>';
+    }
+    if(stats.totalOcorrencias>0){
+      html += '<div><h3>Ocorrências</h3>' +
+        '<div class="stat-grid">' +
+          '<div class="stat-card">' +
+            '<div class="stat-head">'+icon('alert',12,'var(--red)')+'<span>Registradas</span></div>' +
+            '<div class="stat-val">'+stats.totalOcorrencias+'</div>' +
+          '</div>' +
+          '<div class="stat-card">' +
+            '<div class="stat-head">'+icon('alert',12,'var(--red)')+'<span>Custo total</span></div>' +
+            '<div class="stat-val">'+formatBRL(stats.totalCustoOcorrencias)+'</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+      if(stats.occurrenceBreakdown.length>0){
+        html += '<div><h3>Ocorrências por tipo</h3><div class="dash-card short">'+(window.Chart ? '<canvas id="chart-occurrences"></canvas>' : '<p class="empty-sub" style="padding:16px">Não foi possível carregar a biblioteca de gráficos. Verifique sua conexão com a internet e recarregue a página.</p>')+'</div>' +
+          '<div class="legend">' + stats.occurrenceBreakdown.map(function(o,i){
+            var cc = chartColors();
+            return '<span><span class="dot" style="background:'+cc[i%cc.length]+'"></span>'+esc(o.name)+' ('+o.value+')</span>';
+          }).join('') + '</div>' +
+        '</div>';
+      }
+    }
+  }
+
+  if(state.vehicles.length>0){
+    var summary = computeAllVehiclesSummary(dashFilterStart, dashFilterEnd);
+    html += '<div>' +
+      '<h3>Resumo por veículo'+((dashFilterStart||dashFilterEnd) ? ' (período filtrado)' : '')+'</h3>' +
+      '<div class="table-wrap"><table class="dash-table"><thead><tr>' +
+        '<th>Veículo</th><th>Odômetro</th><th>Manutenção</th><th>Combustível</th><th>Total</th><th>km/l (médio)</th><th>Último km/l</th><th>Ocorrências</th>' +
+      '</tr></thead><tbody>' +
+      summary.map(function(s){
+        var isActive = s.id === state.activeVehicleId;
+        return '<tr class="'+(isActive?'active-row':'')+'" data-action="select-vehicle" data-id="'+s.id+'">' +
+          '<td>'+esc(s.label)+(s.plate?' <span class="table-plate">'+esc(s.plate)+'</span>':'')+'</td>' +
+          '<td>'+formatKm(s.currentOdo)+'</td>' +
+          '<td>'+formatBRL(s.totalManutencao)+'</td>' +
+          '<td>'+formatBRL(s.totalCombustivel)+'</td>' +
+          '<td><strong>'+formatBRL(s.total)+'</strong></td>' +
+          '<td>'+(s.avgConsumo ? s.avgConsumo.toFixed(1) : '—')+'</td>' +
+          '<td>'+(s.lastKml!=null ? s.lastKml.toFixed(1) : '—')+'</td>' +
+          '<td>'+(s.totalOcorrencias>0 ? (s.totalOcorrencias+' · '+formatBRL(s.totalCustoOcorrencias)) : '—')+'</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+    '</div>';
+  }
+
+  html += '<div>' +
+    '<h3>Backup dos dados</h3>' +
+    '<div class="backup-box">' +
+      '<p class="backup-desc">Exporte um arquivo com todos os veículos e registros para guardar ou transferir, e importe-o depois neste mesmo app (ou em outro celular).</p>' +
+      '<div class="backup-actions">' +
+        '<button class="backup-btn" data-action="export">'+icon('download',14)+' Exportar</button>' +
+        '<button class="backup-btn" data-action="import">'+icon('upload',14)+' Importar</button>' +
+      '</div>' +
+      (state.importMsg ? '<p class="import-msg" style="color:'+(state.importMsg.indexOf('Importado')===0?'var(--teal)':'var(--red)')+'">'+icon('file',12)+' '+esc(state.importMsg)+'</p>' : '') +
+    '</div>' +
+  '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderFAB(){
+  var color = state.tab==='manutencao' ? 'var(--amber)' : (state.tab==='ocorrencias' ? 'var(--red)' : 'var(--teal)');
+  return '<button class="fab" style="background:'+color+'" data-action="open-form">'+icon('plus',24,'var(--on-accent)','stroke-width:2.5')+'</button>';
+}
+
+function fieldHtml(label, inner){
+  return '<label class="field"><span class="field-label">'+label+'</span>'+inner+'</label>';
+}
+
+function odoFieldHtml(value){
+  return fieldHtml('Odômetro (km)',
+    '<input id="f-odo" type="text" inputmode="numeric" class="km-input" value="'+(value!=null?formatKmInt(value):'')+'" placeholder="Ex: 45.230">' +
+    '<div class="odo-quick-row">' +
+      '<button type="button" class="odo-quick-btn" data-action="odo-quick" data-amount="10000">+10.000</button>' +
+      '<button type="button" class="odo-quick-btn" data-action="odo-quick" data-amount="1000">+1.000</button>' +
+      '<button type="button" class="odo-quick-btn" data-action="odo-quick" data-amount="100">+100</button>' +
+      '<button type="button" class="odo-quick-btn" data-action="odo-quick" data-amount="10">+10</button>' +
+      '<button type="button" class="odo-quick-btn" data-action="odo-clear">Limpar</button>' +
+    '</div>'
+  );
+}
+
+function addressFieldHtml(value, label, category){
+  label = label || 'Endereço';
+  var saved = ((state.locations && state.locations[category]) || []).slice().sort(function(a,b){
+    return (a.name||'').localeCompare(b.name||'', 'pt-BR');
+  });
+  var matched = value ? findLocationByAddress(category, value) : null;
+  var selectHtml = '';
+  if(saved.length){
+    var options = '<option value="">+ Novo local</option>' + saved.map(function(l){
+      return '<option value="'+esc(l.id)+'"'+(matched && matched.id===l.id ? ' selected':'')+'>'+esc(l.name)+'</option>';
+    }).join('');
+    selectHtml = '<select id="f-location-select" data-category="'+esc(category)+'" style="margin-bottom:8px;">'+options+'</select>';
+  }
+  var showNameField = !!value && !matched;
+  return '<div class="field">' +
+    '<span class="field-label">'+label+'</span>' +
+    selectHtml +
+    '<div style="display:flex; gap:8px;">' +
+      '<input id="f-address" data-category="'+esc(category)+'" style="flex:1;" value="'+esc(value||'')+'" placeholder="Ex: Av. Brasil 123, São Paulo">' +
+      '<button type="button" class="icon-btn" data-action="find-address-maps" title="Buscar no Google Maps" style="width:40px; height:40px; flex-shrink:0;">'+icon('mappin',16)+'</button>' +
+    '</div>' +
+    '<p class="tank-hint" style="margin-bottom:0;">Toque no pino para buscar no Google Maps. Ao voltar para o app, o endereço copiado é preenchido automaticamente.</p>' +
+    '<div id="f-location-name-wrap" style="display:'+(showNameField?'block':'none')+'; margin-top:10px;">' +
+      '<span class="field-label" style="font-size:12px;">Como quer chamar este local? <span style="opacity:.65; font-weight:400;">(fica salvo pra próxima vez)</span></span>' +
+      '<input id="f-location-name" placeholder="Ex: Oficina do João">' +
+    '</div>' +
+  '</div>';
+}
+
+function fuelLevelLabel(fraction){
+  if(fraction <= 0.06) return 'E (vazio)';
+  if(fraction >= 0.94) return 'F (cheio)';
+  var eighth = Math.round(fraction*8);
+  var map = {1:'1/8',2:'1/4',3:'3/8',4:'1/2',5:'5/8',6:'3/4',7:'7/8'};
+  return map[eighth] || (Math.round(fraction*100)+'%');
+}
+
+function renderGaugeSVG(fraction, divisions){
+  divisions = divisions || DEFAULT_GAUGE_DIVISIONS;
+  var cx=110, cy=118, r=82;
+  var angleDeg = 180 - fraction*180;
+  var rad = angleDeg * Math.PI/180;
+  var tipX = cx + r*Math.cos(rad);
+  var tipY = cy - r*Math.sin(rad);
+  function tick(deg, len1, len2){
+    var rr = deg*Math.PI/180;
+    var x1 = cx + len1*Math.cos(rr), y1 = cy - len1*Math.sin(rr);
+    var x2 = cx + len2*Math.cos(rr), y2 = cy - len2*Math.sin(rr);
+    return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="var(--border2)" stroke-width="2"/>';
+  }
+  var tickDegs = [];
+  for(var i=0;i<=divisions;i++){ tickDegs.push(180 - i*(180/divisions)); }
+  var ticks = tickDegs.map(function(d){ return tick(d, 68, 78); }).join('');
+  return '' +
+  '<svg id="fuel-gauge-svg" viewBox="0 0 220 135" style="width:100%; max-width:260px; display:block; margin:0 auto; touch-action:none; cursor:pointer;">' +
+    '<path d="M '+(cx-r)+' '+cy+' A '+r+' '+r+' 0 0 1 '+(cx+r)+' '+cy+'" fill="none" stroke="var(--border)" stroke-width="16" stroke-linecap="round"/>' +
+    ticks +
+    '<text x="'+(cx-r-4)+'" y="'+(cy+16)+'" fill="var(--red)" font-size="13" font-weight="700" text-anchor="middle">E</text>' +
+    '<text x="'+cx+'" y="'+(cy-r-8)+'" fill="var(--muted)" font-size="11" text-anchor="middle">½</text>' +
+    '<text x="'+(cx+r+4)+'" y="'+(cy+16)+'" fill="var(--teal)" font-size="13" font-weight="700" text-anchor="middle">F</text>' +
+    '<line id="gauge-needle" x1="'+cx+'" y1="'+cy+'" x2="'+tipX+'" y2="'+tipY+'" stroke="var(--amber)" stroke-width="4" stroke-linecap="round"/>' +
+    '<circle cx="'+cx+'" cy="'+cy+'" r="7" fill="var(--amber)"/>' +
+  '</svg>';
+}
+
+function renderMaintenanceForm(){
+  var pf = formPrefill || {};
+  var isEdit = !!editingMaintenanceId;
+  var selectedService = pf.description && SERVICE_TYPES.indexOf(pf.description) !== -1 ? pf.description : (pf.description ? 'Outro' : SERVICE_TYPES[0]);
+  var isCustom = selectedService === 'Outro';
+  var optOf = function(s){ return '<option value="'+esc(s)+'"'+(s===selectedService?' selected':'')+'>'+esc(s)+'</option>'; };
+  var opts = '<optgroup label="Rotinas">'+SERVICE_TYPES_ROTINA.map(optOf).join('')+'</optgroup>' +
+    '<optgroup label="Periódicos">'+SERVICE_TYPES_PERIODICO.map(optOf).join('')+'</optgroup>' +
+    optOf('Outro');
+  return '<div class="overlay" data-action="close-modal-bg">' +
+    '<div class="sheet" onclick="event.stopPropagation()">' +
+      '<div class="sheet-head"><h2>'+(isEdit?'Editar manutenção':'Nova manutenção')+'</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
+      fieldHtml('Tipo de serviço', '<select id="f-service">'+opts+'</select>') +
+      '<div id="f-custom-wrap" style="display:'+(isCustom?'block':'none')+'">'+fieldHtml('Especifique o serviço', '<input id="f-custom" value="'+esc(isCustom?pf.description:'')+'" placeholder="Ex: Troca de vela de ignição">')+'</div>' +
+      fieldHtml('Data', '<input id="f-date" type="date" value="'+esc(pf.date || new Date().toISOString().slice(0,10))+'">') +
+      fieldHtml('Custo (R$)', '<input id="f-cost" type="text" inputmode="decimal" value="'+toMaskedStr(pf.cost)+'" placeholder="0,00">') +
+      odoFieldHtml(pf.odometer) +
+      addressFieldHtml(pf.address, 'Endereço (oficina, local do serviço)', 'manutencao') +
+      fieldHtml('Garantia (meses)', '<input id="f-warranty" type="number" inputmode="numeric" min="0" step="1" value="'+esc(pf.warrantyMonths!=null?pf.warrantyMonths:'')+'" placeholder="Ex: 3">') +
+      fieldHtml('Observações (peças, nota fiscal...)', '<textarea id="f-notes" rows="3" placeholder="Ex: Nota fiscal 12345">'+esc(pf.notes||'')+'</textarea>') +
+      '<button class="btn-primary" data-action="save-maintenance">'+(isEdit?'Salvar alterações':'Salvar manutenção')+' '+icon('chevron',16,'var(--on-accent)')+'</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderOccurrenceForm(){
+  var pf = formPrefill || {};
+  var isEdit = !!editingOccurrenceId;
+  var selectedType = pf.description && OCCURRENCE_TYPES.indexOf(pf.description) !== -1 ? pf.description : (pf.description ? 'Outro' : OCCURRENCE_TYPES[0]);
+  var isCustom = selectedType === 'Outro';
+  var optOf = function(s){ return '<option value="'+esc(s)+'"'+(s===selectedType?' selected':'')+'>'+esc(s)+'</option>'; };
+  var opts = OCCURRENCE_TYPES.map(optOf).join('');
+  return '<div class="overlay" data-action="close-modal-bg">' +
+    '<div class="sheet" onclick="event.stopPropagation()">' +
+      '<div class="sheet-head"><h2>'+(isEdit?'Editar ocorrência':'Nova ocorrência')+'</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
+      fieldHtml('Tipo de ocorrência', '<select id="f-occtype">'+opts+'</select>') +
+      '<div id="f-occtype-custom-wrap" style="display:'+(isCustom?'block':'none')+'">'+fieldHtml('Especifique a ocorrência', '<input id="f-occtype-custom" value="'+esc(isCustom?pf.description:'')+'" placeholder="Ex: Vidro trincado">')+'</div>' +
+      fieldHtml('Data', '<input id="f-date" type="date" value="'+esc(pf.date || new Date().toISOString().slice(0,10))+'">') +
+      odoFieldHtml(pf.odometer) +
+      addressFieldHtml(pf.address, 'Endereço (local da ocorrência)', 'ocorrencia') +
+      fieldHtml('Custo do reparo (R$)', '<input id="f-cost" type="text" inputmode="decimal" value="'+toMaskedStr(pf.cost)+'" placeholder="0,00">') +
+      fieldHtml('Observações', '<textarea id="f-notes" rows="3" placeholder="Detalhes do ocorrido...">'+esc(pf.notes||'')+'</textarea>') +
+      '<button class="btn-primary" data-action="save-occurrence">'+(isEdit?'Salvar alterações':'Salvar ocorrência')+' '+icon('chevron',16,'var(--on-accent)')+'</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderFuelForm(){
+  var pf = formPrefill || {};
+  var isEdit = !!editingFuelId;
+  var opts = FUEL_TYPES.map(function(f){ return '<option value="'+esc(f)+'"'+(f===pf.fuelType?' selected':'')+'>'+esc(f)+'</option>'; }).join('');
+  var activeVehicle = state.vehicles.find(function(v){return v.id===state.activeVehicleId;});
+  var capacity = activeVehicle ? (activeVehicle.tankCapacity || DEFAULT_TANK_CAPACITY) : DEFAULT_TANK_CAPACITY;
+  var gaugeDivisions = getVehicleGaugeDivisions(activeVehicle);
+  if(pf.gaugeBefore!=null) fuelGaugeFraction = pf.gaugeBefore;
+  var litersEstimate = Math.round(fuelGaugeFraction * capacity);
+  return '<div class="overlay" data-action="close-modal-bg">' +
+    '<div class="sheet teal" onclick="event.stopPropagation()">' +
+      '<div class="sheet-head"><h2>'+(isEdit?'Editar abastecimento':'Novo abastecimento')+'</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
+      fieldHtml('Tipo de combustível', '<select id="f-fueltype">'+opts+'</select>') +
+      fieldHtml('Data', '<input id="f-date" type="date" value="'+esc(pf.date || new Date().toISOString().slice(0,10))+'">') +
+      '<div class="field" style="margin-bottom:16px">' +
+        '<span class="field-label">Nível do ponteiro antes de abastecer</span>' +
+        '<div class="gauge-box">' +
+          renderGaugeSVG(fuelGaugeFraction, gaugeDivisions) +
+          '<div id="gauge-readout" class="gauge-readout">'+fuelLevelLabel(fuelGaugeFraction)+' · ~'+litersEstimate+' L de '+capacity+' L</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="field-row">' +
+        fieldHtml('Litros adicionados', '<input id="f-liters" type="text" inputmode="decimal" value="'+toMaskedStr(pf.liters)+'" placeholder="0,00">') +
+        fieldHtml('Custo por litro (R$)', '<input id="f-priceperliter" type="text" inputmode="decimal" value="'+toMaskedStr(pf.pricePerLiter!=null ? pf.pricePerLiter : (pf.liters && pf.cost ? pf.cost/pf.liters : null))+'" placeholder="0,00">') +
+      '</div>' +
+      fieldHtml('Custo total (R$)', '<input id="f-cost" type="text" inputmode="decimal" value="'+toMaskedStr(pf.cost)+'" placeholder="0,00">') +
+      '<p class="tank-hint" style="margin-top:-8px;">Preencha 2 dos 3 campos (litros, custo por litro ou custo total) — o terceiro é calculado automaticamente.</p>' +
+      odoFieldHtml(pf.odometer) +
+      addressFieldHtml(pf.address, 'Endereço (posto de combustível)', 'combustivel') +
+      '<button class="btn-primary teal" data-action="save-fuel">'+(isEdit?'Salvar alterações':'Salvar abastecimento')+' '+icon('chevron',16,'var(--on-accent)')+'</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderVehicleForm(){
+  var v = editingVehicleId ? (state.vehicles.find(function(x){return x.id===editingVehicleId;}) || {}) : { plate:'', brand:'', model:'', color:'' };
+  var isEdit = !!editingVehicleId;
+  var brandIsKnown = BRANDS.hasOwnProperty(v.brand);
+  var selectedBrand = brandIsKnown ? v.brand : (v.brand ? OUTRA_MARCA : Object.keys(BRANDS)[0]);
+  var brandOpts = BRAND_LIST.map(function(b){ return '<option value="'+esc(b)+'"'+(b===selectedBrand?' selected':'')+'>'+esc(b)+'</option>'; }).join('');
+  var showCustomBrand = selectedBrand === OUTRA_MARCA;
+  var modelsForBrand = BRANDS[selectedBrand] || [];
+  var modelIsKnown = modelsForBrand.indexOf(v.model) !== -1;
+  var modelOpts = modelsForBrand.map(function(m){ return '<option value="'+esc(m)+'"'+(m===v.model?' selected':'')+'>'+esc(m)+'</option>'; }).join('')
+    + '<option value="'+OUTRO_MODELO+'"'+(!modelIsKnown && v.model && !showCustomBrand ? ' selected':'')+'>'+OUTRO_MODELO+'</option>';
+  var showCustomModel = showCustomBrand || (!modelIsKnown && !!v.model);
+  var tankCapacity = v.tankCapacity!=null ? v.tankCapacity : getDefaultTankCapacity(selectedBrand, v.model);
+  var gaugeDivisions = getVehicleGaugeDivisions(v);
+  var photoPreview = vehiclePhotoDraft
+    ? '<img id="v-photo-preview-img" class="photo-preview" src="'+vehiclePhotoDraft+'" alt="">'
+    : '<div id="v-photo-preview-ph" class="photo-preview-placeholder">'+icon('car',22,'var(--dim2)')+'</div>';
+
+  return '<div class="overlay" data-action="close-modal-bg">' +
+    '<div class="sheet" onclick="event.stopPropagation()">' +
+      '<div class="sheet-head"><h2>'+(isEdit?'Editar veículo':'Novo veículo')+'</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
+      '<div class="field">' +
+        '<span class="field-label">Foto ou ilustração do veículo</span>' +
+        '<div class="photo-picker" id="v-photo-wrap">' +
+          photoPreview +
+          '<div class="photo-actions">' +
+            '<input type="file" id="v-photo-input" accept="image/*" class="native-file-input">' +
+            (vehiclePhotoDraft ? '<button type="button" class="photo-btn remove" data-action="remove-photo">'+icon('x',13,'var(--red)')+' Remover</button>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      fieldHtml('Placa', '<input id="v-plate" style="font-family:var(--mono); letter-spacing:.05em; text-transform:uppercase" value="'+esc(v.plate)+'" placeholder="Ex: ABC1D23">') +
+      fieldHtml('Marca', '<select id="v-brand">'+brandOpts+'</select>') +
+      '<div id="v-custom-brand-wrap" style="display:'+(showCustomBrand?'block':'none')+'">'+fieldHtml('Especifique a marca', '<input id="v-custom-brand" value="'+esc(showCustomBrand?v.brand:'')+'" placeholder="Ex: Subaru">')+'</div>' +
+      '<div id="v-model-wrap" style="display:'+(showCustomBrand?'none':'block')+'">'+fieldHtml('Modelo', '<select id="v-model">'+modelOpts+'</select>')+'</div>' +
+      '<div id="v-custom-model-wrap" style="display:'+(showCustomModel?'block':'none')+'">'+fieldHtml('Especifique o modelo', '<input id="v-custom-model" value="'+esc(showCustomModel?v.model:'')+'" placeholder="Ex: Meriva">')+'</div>' +
+      fieldHtml('Cor', '<input id="v-color" value="'+esc(v.color)+'" placeholder="Ex: Prata">') +
+      fieldHtml('Capacidade do tanque (litros)', '<input id="v-tank" type="number" min="1" step="1" value="'+tankCapacity+'">') +
+      '<p class="tank-hint">Sugestão automática pelo modelo — ajuste se souber o valor exato do manual do veículo.</p>' +
+      fieldHtml('Divisões do marcador de combustível', '<input id="v-gaugedivisions" type="number" min="2" max="20" step="1" value="'+gaugeDivisions+'">') +
+      '<p class="tank-hint">Quantos traços há entre E e F no painel deste carro (padrão: 8). Isso ajusta só o desenho do marcador na tela de abastecimento.</p>' +
+      fieldHtml('Data de aquisição', '<input id="v-acqdate" type="date" value="'+esc(v.acquisitionDate||'')+'">') +
+      fieldHtml('Valor de aquisição (R$)', '<input id="v-acqvalue" type="text" inputmode="decimal" value="'+toMaskedStr(v.purchaseValue)+'" placeholder="0,00">') +
+      fieldHtml('Km inicial (no momento da compra)', '<input id="v-initodo" type="text" inputmode="numeric" class="km-input" value="'+(v.initialOdometer!=null?formatKmInt(v.initialOdometer):'')+'" placeholder="Ex: 32.000">') +
+      '<button class="btn-primary" data-action="save-vehicle">'+(isEdit?'Salvar alterações':'Adicionar veículo')+' '+icon('chevron',16,'var(--on-accent)')+'</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function updateMaintenanceInterval(service, value){
+  var km = parseKmValue(value);
+  if(!state.maintenanceIntervals) state.maintenanceIntervals = {};
+  if(km > 0) state.maintenanceIntervals[service] = km;
+  else delete state.maintenanceIntervals[service];
+  persist();
+}
+
+function computeMaintenanceAlerts(vehicleId, currentOdo){
+  var intervals = state.maintenanceIntervals || {};
+  var alerts = [];
+  Object.keys(intervals).forEach(function(service){
+    var interval = Number(intervals[service]);
+    if(!interval || interval <= 0) return;
+    var records = state.maintenance.filter(function(m){ return m.vehicleId===vehicleId && m.description===service && !isNaN(Number(m.odometer)); });
+    if(!records.length) return;
+    var last = records.reduce(function(latest,r){
+      if(!latest) return r;
+      if(r.date > latest.date) return r;
+      if(r.date === latest.date && Number(r.odometer) > Number(latest.odometer)) return r;
+      return latest;
+    }, null);
+    var lastOdo = Number(last.odometer);
+    var nextDueKm = lastOdo + interval;
+    var remaining = nextDueKm - Number(currentOdo);
+    var threshold = Math.max(200, Math.round(interval * 0.1));
+    if(remaining <= threshold){
+      alerts.push({
+        service: service,
+        overdue: remaining <= 0,
+        remaining: remaining,
+        nextDueKm: nextDueKm
+      });
+    }
+  });
+  return alerts.sort(function(a,b){ return a.remaining - b.remaining; });
+}
+
+function renderSettingsModal(){
+  var html = '<div class="overlay" data-action="close-modal-bg">' +
+    '<div class="sheet" onclick="event.stopPropagation()">' +
+      '<div class="sheet-head"><h2>Configurações</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
+      '<span class="field-label" style="display:block; margin-bottom:10px;">Aparência do aplicativo</span>';
+  Object.keys(THEMES).forEach(function(key){
+    var t = THEMES[key];
+    var isActive = key === currentTheme;
+    var v = t.vars;
+    html += '<div class="theme-row '+(isActive?'active':'')+'" data-action="select-theme" data-theme="'+key+'">' +
+      '<div class="theme-swatch">' +
+        '<span style="background:'+v['--bg']+'"></span>' +
+        '<span style="background:'+v['--amber']+'"></span>' +
+        '<span style="background:'+v['--teal']+'"></span>' +
+      '</div>' +
+      '<span class="theme-name" style="font-family:'+v['--sans']+'">'+t.name+'</span>' +
+      (isActive ? '<span class="theme-check">'+icon('check',18)+'</span>' : '') +
+    '</div>';
+  });
+  html += '<span class="field-label" style="display:block; margin:22px 0 6px;">Intervalo das manutenções periódicas</span>' +
+    '<p class="tank-hint" style="margin-top:0;">Informe a cada quantos km cada manutenção deve ser refeita. Deixe em branco para não receber alertas desse tipo.</p>';
+  SERVICE_TYPES_PERIODICO.forEach(function(service){
+    var currentVal = state.maintenanceIntervals[service];
+    html += fieldHtml(esc(service), '<input type="text" inputmode="numeric" class="km-input maint-interval-input" data-service="'+esc(service)+'" placeholder="Ex: 10.000" value="'+(currentVal!=null?formatKmInt(currentVal):'')+'">');
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function renderVehicleSwitch(){
+  var html = '<div class="overlay" data-action="close-modal-bg">' +
+    '<div class="sheet" onclick="event.stopPropagation()">' +
+      '<div class="sheet-head"><h2>Seus veículos</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>';
+  if(state.vehicles.length===0){
+    html += '<p class="empty-sub" style="margin-bottom:16px">Nenhum veículo cadastrado ainda.</p>';
+  } else {
+    html += '<div class="list" style="margin-bottom:16px">';
+    state.vehicles.forEach(function(v){
+      var isActive = v.id === state.activeVehicleId;
+      var thumb = v.photo
+        ? '<img class="vswitch-photo" src="'+v.photo+'" alt="">'
+        : '<div class="vswitch-photo" style="display:flex;align-items:center;justify-content:center;">'+icon('car',16,'var(--dim2)')+'</div>';
+      html += '<div class="vswitch-row '+(isActive?'active':'')+'" data-action="select-vehicle" data-id="'+v.id+'">' +
+        thumb +
+        '<div class="card-main">' +
+          '<div class="card-title">'+esc(getVehicleLabel(v))+(isActive?' <span class="vswitch-tag">atual</span>':'')+'</div>' +
+          (v.plate||v.color ? '<div class="card-meta"><span>'+esc([v.plate,v.color].filter(Boolean).join(' · '))+'</span></div>' : '') +
+        '</div>' +
+        '<div class="card-side">' +
+          '<button class="icon-btn" data-action="edit-vehicle" data-id="'+v.id+'">'+icon('wrench',14,'var(--muted)')+'</button>' +
+          '<button class="icon-btn" data-action="delete-vehicle" data-id="'+v.id+'">'+icon('x',15,'var(--red)')+'</button>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+  html += '<button class="btn-primary" data-action="add-vehicle">'+icon('plus',16,'var(--on-accent)')+' Adicionar veículo</button>';
+  html += '</div></div>';
+  return html;
+}
+
+function renderWarning(){
+  var p = state.pending;
+  return '<div class="overlay center">' +
+    '<div class="warn-box">' +
+      '<div class="warn-head">'+icon('alert',18,'var(--red)')+'<h3>Verifique os dados</h3></div>' +
+      '<p class="warn-text">O(s) campo(s) <strong>'+p.issues.join(' e ')+'</strong> deste registro '+(p.issues.length>1?'são menores':'é menor')+' do que o último registro salvo. Isso pode indicar um erro de digitação.</p>' +
+      '<div class="warn-actions">' +
+        '<button class="warn-btn cancel" data-action="cancel-pending">Corrigir</button>' +
+        '<button class="warn-btn confirm" data-action="confirm-pending">Salvar mesmo assim</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderCapacityWarning(){
+  var c = capacityWarning;
+  return '<div class="overlay center">' +
+    '<div class="warn-box">' +
+      '<div class="warn-head">'+icon('alert',18,'var(--red)')+'<h3>Volume acima da capacidade</h3></div>' +
+      '<p class="warn-text">O nível indicado antes de abastecer (~'+Math.round(c.volBefore)+' L) somado aos litros adicionados resultaria em <strong>'+c.volAfter.toFixed(1)+' L</strong>, mas o tanque comporta apenas <strong>'+c.capacity+' L</strong>. Ajuste a posição do ponteiro ou a quantidade de litros adicionados.</p>' +
+      '<div class="warn-actions">' +
+        '<button class="warn-btn confirm" data-action="ack-capacity-warning" style="flex:none; width:100%;">Entendi, vou ajustar</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderCelebration(){
+  var e = activeCelebration;
+  var isLevelUp = e.type === 'levelup';
+  var confettiHtml = e.confetti.map(function(c){
+    return '<span class="confetti-piece" style="left:'+c.left+'%; background:'+c.color+'; animation-delay:'+c.delay+'s; animation-duration:'+c.duration+'s; --rot:'+c.rotate+'deg; --drift:'+c.drift+'px;"></span>';
+  }).join('');
+  var headline = isLevelUp ? 'SUBIU DE NÍVEL!' : 'CONQUISTA ALCANÇADA!';
+  var levelTier = isLevelUp ? getLevelTier(e.level) : null;
+  var body = isLevelUp
+    ? '<div class="celebrate-level">Nível '+e.level+'</div><div class="celebrate-tier">'+esc(levelTier.name)+'</div>'
+    : '<div class="celebrate-mission">'+icon(e.icon,22,'#fff')+'<span>'+esc(e.title)+'</span></div>' +
+      '<div class="celebrate-xp">+'+e.xp+' XP</div>';
+  var cardStyle = isLevelUp ? ' style="background:'+levelTier.gradient+'"' : '';
+  return '<div class="celebrate-overlay">' +
+    '<div class="confetti-layer">'+confettiHtml+'</div>' +
+    '<div class="celebrate-card '+(isLevelUp?'is-levelup':'')+'"'+cardStyle+'>' +
+      '<div class="celebrate-burst"></div>' +
+      '<div class="celebrate-headline">'+headline+'</div>' +
+      body +
+      '<button class="celebrate-btn" data-action="dismiss-celebration">Continuar</button>' +
+    '</div>' +
+  '</div>';
+}
+
+/* ---------- charts ---------- */
+function destroyCharts(){
+  Object.keys(charts).forEach(function(k){ try{ charts[k].destroy(); }catch(e){} });
+  charts = {};
+}
+function renderCharts(stats){
+  destroyCharts();
+  var gridColor = cssVar('--border');
+  var tickColor = cssVar('--muted');
+  var amberColor = cssVar('--amber');
+  var tealColor = cssVar('--teal');
+  var textColor = cssVar('--text');
+
+  var monthlyEl = document.getElementById('chart-monthly');
+  if(monthlyEl && window.Chart){
+    charts.monthly = new Chart(monthlyEl, {
+      type:'bar',
+      data:{
+        labels: stats.monthly.map(function(m){return m.month;}),
+        datasets:[
+          {label:'Manutenção', data:stats.monthly.map(function(m){return m.manutencao;}), backgroundColor:amberColor, borderRadius:3},
+          {label:'Combustível', data:stats.monthly.map(function(m){return m.combustivel;}), backgroundColor:tealColor, borderRadius:3}
+        ]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{labels:{color:textColor, font:{size:11}}}, tooltip:{callbacks:{label:function(ctx){ return ' '+ctx.dataset.label+': '+formatBRL(ctx.parsed.y); }}} },
+        scales:{ x:{ticks:{color:tickColor, font:{size:10}}, grid:{color:gridColor}}, y:{ticks:{color:tickColor, font:{size:10}}, grid:{color:gridColor}} }
+      }
+    });
+  }
+
+  var consEl = document.getElementById('chart-consumption');
+  if(consEl && window.Chart){
+    charts.consumption = new Chart(consEl, {
+      type:'line',
+      data:{ labels: stats.consumptionTrend.map(function(c){return c.label;}), datasets:[{label:'km/l', data:stats.consumptionTrend.map(function(c){return c.kml;}), borderColor:tealColor, backgroundColor:tealColor, tension:.3, pointRadius:3}] },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false} },
+        scales:{ x:{ticks:{color:tickColor, font:{size:10}}, grid:{color:gridColor}}, y:{ticks:{color:tickColor, font:{size:10}}, grid:{color:gridColor}} }
+      }
+    });
+  }
+
+  var servEl = document.getElementById('chart-services');
+  if(servEl && window.Chart){
+    charts.services = new Chart(servEl, {
+      type:'pie',
+      data:{ labels: stats.serviceBreakdown.map(function(s){return s.name;}), datasets:[{ data: stats.serviceBreakdown.map(function(s){return s.value;}), backgroundColor: chartColors() }] },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{callbacks:{label:function(ctx){ return ' '+ctx.label+': '+formatBRL(ctx.parsed); }}} }
+      }
+    });
+  }
+
+  var occEl = document.getElementById('chart-occurrences');
+  if(occEl && window.Chart){
+    charts.occurrences = new Chart(occEl, {
+      type:'pie',
+      data:{ labels: stats.occurrenceBreakdown.map(function(o){return o.name;}), datasets:[{ data: stats.occurrenceBreakdown.map(function(o){return o.value;}), backgroundColor: chartColors() }] },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{callbacks:{label:function(ctx){ return ' '+ctx.label+': '+ctx.parsed; }}} }
+      }
+    });
+  }
+}
+
+/* ---------- event delegation ---------- */
+function attachEvents(){
+  var app = document.getElementById('app');
+
+  app.querySelectorAll('[data-action]').forEach(function(el){
+    var action = el.getAttribute('data-action');
+    el.addEventListener('click', function(e){
+      if(action==='set-tab'){ state.tab = el.getAttribute('data-tab'); render(); }
+      else if(action==='open-form'){
+        modal = state.tab==='manutencao' ? 'maintenance' : (state.tab==='ocorrencias' ? 'occurrence' : 'fuel');
+        editingFuelId = null; editingMaintenanceId = null; editingOccurrenceId = null;
+        var lastOdo = state.activeVehicleId ? computeStatsForVehicle(state.activeVehicleId).currentOdo : null;
+        formPrefill = (lastOdo!=null && lastOdo>0) ? { odometer: lastOdo } : null;
+        if(modal==='fuel') fuelGaugeFraction = 0.5;
+        render();
+      }
+      else if(action==='open-vehicle-switch'){ openModal('vehicle-switch'); }
+      else if(action==='open-settings'){ openModal('settings'); }
+      else if(action==='select-theme'){ applyTheme(el.getAttribute('data-theme')); }
+      else if(action==='add-vehicle'){ editingVehicleId = null; vehiclePhotoDraft = null; openModal('vehicle'); }
+      else if(action==='edit-vehicle'){
+        e.stopPropagation();
+        editingVehicleId = el.getAttribute('data-id');
+        var editVeh = state.vehicles.find(function(x){return x.id===editingVehicleId;});
+        vehiclePhotoDraft = editVeh ? (editVeh.photo || null) : null;
+        openModal('vehicle');
+      }
+      else if(action==='delete-vehicle'){
+        e.stopPropagation();
+        var vid = el.getAttribute('data-id');
+        var vv = state.vehicles.find(function(x){return x.id===vid;});
+        var label = vv ? getVehicleLabel(vv) : 'este veículo';
+        if(window.confirm('Excluir '+label+'? Isso também apaga todas as manutenções e abastecimentos registrados para ele.')){
+          deleteVehicle(vid);
+        }
+      }
+      else if(action==='select-vehicle'){ selectVehicle(el.getAttribute('data-id')); if(modal==='vehicle-switch') closeModal(); }
+      else if(action==='remove-photo'){
+        vehiclePhotoDraft = null;
+        var wrap = document.getElementById('v-photo-wrap');
+        if(wrap){
+          wrap.innerHTML = '<div class="photo-preview-placeholder">'+icon('car',22,'var(--dim2)')+'</div>' +
+            '<div class="photo-actions"><input type="file" id="v-photo-input" accept="image/*" class="native-file-input"></div>';
+          document.getElementById('v-photo-input').addEventListener('change', handlePhotoInputChange);
+        }
+      }
+      else if(action==='close-modal'){ closeModal(); }
+      else if(action==='close-modal-bg'){ if(e.target===el) closeModal(); }
+      else if(action==='odo-quick'){
+        var odoInput = document.getElementById('f-odo');
+        if(odoInput){
+          var amount = Number(el.getAttribute('data-amount')) || 0;
+          var curOdo = parseKmValue(odoInput.value) || 0;
+          odoInput.value = formatKmInt(curOdo + amount);
+        }
+      }
+      else if(action==='odo-clear'){
+        var odoInputClear = document.getElementById('f-odo');
+        if(odoInputClear) odoInputClear.value = '';
+      }
+      else if(action==='del-maintenance'){ removeMaintenance(el.getAttribute('data-id')); }
+      else if(action==='edit-maintenance'){
+        var mid = el.getAttribute('data-id');
+        var mentry = state.maintenance.find(function(x){return x.id===mid;});
+        if(mentry){
+          editingMaintenanceId = mid;
+          formPrefill = mentry;
+          modal = 'maintenance';
+          render();
+        }
+      }
+      else if(action==='find-address-maps'){
+        var addrVal = (document.getElementById('f-address').value || '').trim();
+        awaitingAddressPaste = true;
+        if(addrVal){
+          window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(addrVal), '_blank');
+        } else if(navigator.geolocation){
+          navigator.geolocation.getCurrentPosition(function(pos){
+            var lat = pos.coords.latitude, lng = pos.coords.longitude;
+            window.open('https://www.google.com/maps/search/?api=1&query='+lat+','+lng, '_blank');
+          }, function(){
+            window.open('https://www.google.com/maps', '_blank');
+          });
+        } else {
+          window.open('https://www.google.com/maps', '_blank');
+        }
+      }
+      else if(action==='edit-fuel'){
+        var fid = el.getAttribute('data-id');
+        var fentry = state.fuel.find(function(x){return x.id===fid;});
+        if(fentry){
+          editingFuelId = fid;
+          formPrefill = fentry;
+          fuelGaugeFraction = fentry.gaugeBefore!=null ? fentry.gaugeBefore : 0.5;
+          modal = 'fuel';
+          render();
+        }
+      }
+      else if(action==='del-fuel'){ removeFuel(el.getAttribute('data-id')); }
+      else if(action==='del-occurrence'){ removeOccurrence(el.getAttribute('data-id')); }
+      else if(action==='edit-occurrence'){
+        var oid = el.getAttribute('data-id');
+        var oentry = state.occurrences.find(function(x){return x.id===oid;});
+        if(oentry){
+          editingOccurrenceId = oid;
+          formPrefill = oentry;
+          modal = 'occurrence';
+          render();
+        }
+      }
+      else if(action==='cancel-pending'){ cancelPending(); }
+      else if(action==='confirm-pending'){ confirmPending(); render(); }
+      else if(action==='ack-capacity-warning'){ capacityWarning = null; render(); }
+      else if(action==='dismiss-celebration'){ dismissCelebration(); }
+      else if(action==='apply-dash-filter'){
+        dashFilterStart = document.getElementById('dash-filter-start').value;
+        dashFilterEnd = document.getElementById('dash-filter-end').value;
+        render();
+      }
+      else if(action==='clear-dash-filter'){ dashFilterStart=''; dashFilterEnd=''; render(); }
+      else if(action==='export'){ exportData(); }
+      else if(action==='import'){ triggerImport(); }
+      else if(action==='save-maintenance'){
+        var date = document.getElementById('f-date').value;
+        var service = document.getElementById('f-service').value;
+        var custom = document.getElementById('f-custom').value;
+        var cost = parseMasked(document.getElementById('f-cost').value);
+        var odo = document.getElementById('f-odo').value;
+        var address = document.getElementById('f-address').value.trim();
+        var addressName = document.getElementById('f-location-name') ? document.getElementById('f-location-name').value : '';
+        var notes = document.getElementById('f-notes').value;
+        var warrantyRaw = document.getElementById('f-warranty').value;
+        var warrantyMonths = warrantyRaw !== '' ? parseInt(warrantyRaw, 10) : null;
+        if(!date || !odo) return;
+        var description = service==='Outro' ? (custom || 'Outro') : service;
+        var isPending = addMaintenance({ date:date, description:description, cost:cost, odometer:parseKmValue(odo), address:address, notes:notes, warrantyMonths:warrantyMonths }, editingMaintenanceId);
+        saveLocationIfNew('manutencao', address, addressName);
+        triggerOdoRoll();
+        if(isPending) render(); else closeModal();
+      }
+      else if(action==='save-occurrence'){
+        var odate = document.getElementById('f-date').value;
+        var otype = document.getElementById('f-occtype').value;
+        var ocustom = document.getElementById('f-occtype-custom').value;
+        var ocost = parseMasked(document.getElementById('f-cost').value);
+        var oodo = document.getElementById('f-odo').value;
+        var oaddress = document.getElementById('f-address').value.trim();
+        var oaddressName = document.getElementById('f-location-name') ? document.getElementById('f-location-name').value : '';
+        var onotes = document.getElementById('f-notes').value;
+        if(!odate) return;
+        var odescription = otype==='Outro' ? (ocustom || 'Outro') : otype;
+        addOccurrence({ date:odate, description:odescription, cost:ocost, odometer: oodo ? parseKmValue(oodo) : null, address:oaddress, notes:onotes }, editingOccurrenceId);
+        saveLocationIfNew('ocorrencia', oaddress, oaddressName);
+        if(oodo) triggerOdoRoll();
+        closeModal();
+      }
+      else if(action==='save-fuel'){
+        var date2 = document.getElementById('f-date').value;
+        var fuelType = document.getElementById('f-fueltype').value;
+        var liters = parseMasked(document.getElementById('f-liters').value);
+        var cost2 = parseMasked(document.getElementById('f-cost').value);
+        var odo2 = document.getElementById('f-odo').value;
+        var address2 = document.getElementById('f-address').value.trim();
+        var addressName2 = document.getElementById('f-location-name') ? document.getElementById('f-location-name').value : '';
+        if(!date2 || !odo2) return;
+        var activeVehicleForFuel = state.vehicles.find(function(v){return v.id===state.activeVehicleId;});
+        var capacityNow = activeVehicleForFuel ? activeVehicleForFuel.tankCapacity : DEFAULT_TANK_CAPACITY;
+        var fuelEntry = { date:date2, fuelType:fuelType, liters:liters, cost:cost2, odometer:parseKmValue(odo2), address:address2, gaugeBefore: fuelGaugeFraction, tankCapacityAtEntry: capacityNow };
+        var capIssue = checkTankCapacity(fuelEntry, capacityNow);
+        if(capIssue){
+          capacityWarning = capIssue;
+          formPrefill = fuelEntry;
+          render();
+          return;
+        }
+        var isPending2 = addFuel(fuelEntry, editingFuelId);
+        saveLocationIfNew('combustivel', address2, addressName2);
+        triggerOdoRoll();
+        if(isPending2) render(); else closeModal();
+      }
+      else if(action==='save-vehicle'){
+        var plate = document.getElementById('v-plate').value.trim().toUpperCase();
+        var brandSel = document.getElementById('v-brand').value;
+        var brand, model;
+        if(brandSel === OUTRA_MARCA){
+          brand = (document.getElementById('v-custom-brand').value || '').trim();
+          model = (document.getElementById('v-custom-model').value || '').trim();
+        } else {
+          brand = brandSel;
+          var modelSel = document.getElementById('v-model').value;
+          if(modelSel === OUTRO_MODELO){
+            model = (document.getElementById('v-custom-model').value || '').trim();
+          } else {
+            model = modelSel;
+          }
+        }
+        var color = document.getElementById('v-color').value.trim();
+        var tankCapacity = Number(document.getElementById('v-tank').value) || getDefaultTankCapacity(brand, model);
+        var gaugeDivisionsVal = parseInt(document.getElementById('v-gaugedivisions').value, 10);
+        var gaugeDivisions = (gaugeDivisionsVal && gaugeDivisionsVal>=2) ? gaugeDivisionsVal : DEFAULT_GAUGE_DIVISIONS;
+        var acquisitionDate = document.getElementById('v-acqdate').value;
+        var purchaseValue = parseMasked(document.getElementById('v-acqvalue').value);
+        var initOdoVal = document.getElementById('v-initodo').value;
+        var initialOdometer = parseKmValue(initOdoVal);
+        var vData = { plate:plate, brand:brand, model:model, color:color, tankCapacity:tankCapacity, gaugeDivisions:gaugeDivisions, photo:vehiclePhotoDraft, acquisitionDate:acquisitionDate, purchaseValue:purchaseValue, initialOdometer:initialOdometer };
+        if(editingVehicleId){ updateVehicle(editingVehicleId, vData); }
+        else { addVehicle(vData); }
+        closeModal();
+      }
+    });
+  });
+
+  var maintCostEl = document.getElementById('f-cost');
+  var litersEl = document.getElementById('f-liters');
+  var priceEl = document.getElementById('f-priceperliter');
+
+  if(litersEl && priceEl && maintCostEl){
+    // fuel form: o usuário preenche 2 dos 3 campos (litros, custo/litro, custo total) — o terceiro é sempre calculado
+    // a partir dos 2 campos que o usuário DE FATO editou por último, nessa ordem, não importa qual foi preenchido primeiro
+    var fuelTouchOrder = [];
+    var recalcFuelValues = function(source){
+      var idx = fuelTouchOrder.indexOf(source);
+      if(idx!==-1) fuelTouchOrder.splice(idx,1);
+      fuelTouchOrder.unshift(source);
+      fuelTouchOrder = fuelTouchOrder.slice(0,2);
+      if(fuelTouchOrder.length<2) return; // ainda falta o segundo campo pra dar pra calcular o terceiro
+
+      var liters = parseMasked(litersEl.value);
+      var price = parseMasked(priceEl.value);
+      var total = parseMasked(maintCostEl.value);
+
+      if(fuelTouchOrder.indexOf('liters')===-1){
+        // usuário preencheu custo/litro + custo total -> calcula litros
+        if(price>0) litersEl.value = toMaskedStr(total/price);
+      } else if(fuelTouchOrder.indexOf('price')===-1){
+        // usuário preencheu litros + custo total -> calcula custo/litro
+        if(liters>0) priceEl.value = toMaskedStr(total/liters);
+      } else if(fuelTouchOrder.indexOf('total')===-1){
+        // usuário preencheu litros + custo/litro -> calcula custo total
+        maintCostEl.value = toMaskedStr(liters*price);
+      }
+    };
+    wireMoneyMask('f-liters', function(){ recalcFuelValues('liters'); });
+    wireMoneyMask('f-priceperliter', function(){ recalcFuelValues('price'); });
+    wireMoneyMask('f-cost', function(){ recalcFuelValues('total'); });
+  } else if(maintCostEl){
+    // maintenance form: cost only needs the decimal mask, no cross-calc
+    wireMoneyMask('f-cost');
+  }
+
+  var serviceSel = document.getElementById('f-service');
+  if(serviceSel){
+    var toggleCustom = function(){ document.getElementById('f-custom-wrap').style.display = serviceSel.value==='Outro' ? 'block' : 'none'; };
+    serviceSel.addEventListener('change', toggleCustom);
+    toggleCustom();
+  }
+
+  var occTypeSel = document.getElementById('f-occtype');
+  if(occTypeSel){
+    var toggleOccCustom = function(){ document.getElementById('f-occtype-custom-wrap').style.display = occTypeSel.value==='Outro' ? 'block' : 'none'; };
+    occTypeSel.addEventListener('change', toggleOccCustom);
+    toggleOccCustom();
+  }
+
+  var brandSel = document.getElementById('v-brand');
+  if(brandSel){
+    brandSel.addEventListener('change', function(){
+      var isOutra = brandSel.value === OUTRA_MARCA;
+      document.getElementById('v-custom-brand-wrap').style.display = isOutra ? 'block' : 'none';
+      document.getElementById('v-model-wrap').style.display = isOutra ? 'none' : 'block';
+      var tankInput = document.getElementById('v-tank');
+      if(!isOutra){
+        var models = BRANDS[brandSel.value] || [];
+        var opts = models.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('') + '<option value="'+OUTRO_MODELO+'">'+OUTRO_MODELO+'</option>';
+        var modelSelEl = document.getElementById('v-model');
+        modelSelEl.innerHTML = opts;
+        document.getElementById('v-custom-model-wrap').style.display = 'none';
+        if(tankInput) tankInput.value = getDefaultTankCapacity(brandSel.value, modelSelEl.value);
+      } else {
+        document.getElementById('v-custom-model-wrap').style.display = 'block';
+        if(tankInput) tankInput.value = DEFAULT_TANK_CAPACITY;
+      }
+    });
+  }
+  var modelSel = document.getElementById('v-model');
+  if(modelSel){
+    modelSel.addEventListener('change', function(){
+      document.getElementById('v-custom-model-wrap').style.display = modelSel.value===OUTRO_MODELO ? 'block' : 'none';
+      var tankInput = document.getElementById('v-tank');
+      if(tankInput && modelSel.value!==OUTRO_MODELO && brandSel){
+        tankInput.value = getDefaultTankCapacity(brandSel.value, modelSel.value);
+      }
+    });
+  }
+  if(document.getElementById('v-acqvalue')) wireMoneyMask('v-acqvalue');
+
+  document.querySelectorAll('.km-input').forEach(function(kmEl){ wireKmMask(kmEl); });
+
+  var addressEl = document.getElementById('f-address');
+  if(addressEl){
+    var locCategory = addressEl.getAttribute('data-category');
+    var locSelect = document.getElementById('f-location-select');
+    var nameWrap = document.getElementById('f-location-name-wrap');
+    var refreshNameVisibility = function(){
+      var match = findLocationByAddress(locCategory, addressEl.value);
+      if(nameWrap) nameWrap.style.display = (addressEl.value.trim() && !match) ? 'block' : 'none';
+      if(locSelect) locSelect.value = match ? match.id : '';
+    };
+    addressEl.addEventListener('input', refreshNameVisibility);
+    if(locSelect){
+      locSelect.addEventListener('change', function(){
+        if(locSelect.value){
+          var loc = findLocationById(locCategory, locSelect.value);
+          if(loc) addressEl.value = loc.address;
+        } else {
+          addressEl.value = '';
+          addressEl.focus();
+        }
+        refreshNameVisibility();
+      });
+    }
+  }
+  document.querySelectorAll('.maint-interval-input').forEach(function(mEl){
+    mEl.addEventListener('change', function(){
+      updateMaintenanceInterval(mEl.getAttribute('data-service'), mEl.value);
+    });
+  });
+
+  var importInput = document.getElementById('import-input');
+  if(importInput) importInput.addEventListener('change', handleImportFile);
+
+  var photoInput = document.getElementById('v-photo-input');
+  if(photoInput) photoInput.addEventListener('change', handlePhotoInputChange);
+
+  var gaugeSvg = document.getElementById('fuel-gauge-svg');
+  if(gaugeSvg){
+    var activeVehicleForGauge = state.vehicles.find(function(v){return v.id===state.activeVehicleId;});
+    var gaugeCapacity = activeVehicleForGauge ? (activeVehicleForGauge.tankCapacity || DEFAULT_TANK_CAPACITY) : DEFAULT_TANK_CAPACITY;
+    var cx=110, cy=118, r=82;
+
+    function updateGaugeVisual(fraction){
+      fuelGaugeFraction = fraction;
+      var angleDeg = 180 - fraction*180;
+      var rad = angleDeg * Math.PI/180;
+      var tipX = cx + r*Math.cos(rad);
+      var tipY = cy - r*Math.sin(rad);
+      var needle = document.getElementById('gauge-needle');
+      if(needle){ needle.setAttribute('x2', tipX); needle.setAttribute('y2', tipY); }
+      var readout = document.getElementById('gauge-readout');
+      if(readout){ readout.textContent = fuelLevelLabel(fraction)+' · ~'+Math.round(fraction*gaugeCapacity)+' L de '+gaugeCapacity+' L'; }
+    }
+
+    function fractionFromEvent(evt){
+      var pt = gaugeSvg.createSVGPoint();
+      pt.x = evt.clientX; pt.y = evt.clientY;
+      var ctm = gaugeSvg.getScreenCTM();
+      if(!ctm) return null;
+      var svgP = pt.matrixTransform(ctm.inverse());
+      var dx = svgP.x - cx, dy = cy - svgP.y;
+      var angle = Math.atan2(dy, dx) * 180/Math.PI; // -180..180, valid range 0..180 (upper half)
+      if(dy < 0){
+        angle = dx >= 0 ? 0 : 180; // pointer dragged below the pivot line — clamp to nearest end
+      }
+      angle = Math.max(0, Math.min(180, angle));
+      return 1 - (angle/180);
+    }
+
+    var dragging = false;
+    gaugeSvg.addEventListener('pointerdown', function(evt){
+      dragging = true;
+      try{ gaugeSvg.setPointerCapture(evt.pointerId); }catch(e){}
+      var fr = fractionFromEvent(evt);
+      if(fr!=null) updateGaugeVisual(fr);
+    });
+    gaugeSvg.addEventListener('pointermove', function(evt){
+      if(!dragging) return;
+      var fr = fractionFromEvent(evt);
+      if(fr!=null) updateGaugeVisual(fr);
+    });
+    gaugeSvg.addEventListener('pointerup', function(){ dragging = false; });
+    gaugeSvg.addEventListener('pointercancel', function(){ dragging = false; });
+  }
+
+  if(pendingOdoRollAnimation){
+    pendingOdoRollAnimation = false;
+    var odoStrips = document.querySelectorAll('.odo-digit-strip');
+    odoStrips.forEach(function(strip, idx){
+      var endPx = parseFloat(strip.getAttribute('data-target-offset'));
+      // salta instantaneamente para o início da tira (mostrando "0"), sem transição
+      strip.style.transition = 'none';
+      strip.style.transform = 'translateY(0px)';
+      void strip.offsetHeight; // força o navegador a registrar o estado inicial antes de animar
+      setTimeout(function(){
+        strip.style.transition = 'transform 1.05s cubic-bezier(.16,.84,.29,1)';
+        strip.style.transform = 'translateY('+endPx+'px)';
+      }, idx*80); // pequena defasagem por dígito, criando um efeito de rolagem em cascata
+    });
+  }
+}
+
+/* ---------- init ---------- */
+var THEME_STORAGE_KEY = 'controle-veiculo-theme';
+var THEMES = {
+  preto: {
+    name: 'Preto (atual)',
+    vars: { '--bg':'#111317','--bg2':'#17191d','--panel':'#1a1c20','--panel2':'#1c1e22','--border':'#262931','--border2':'#33363d','--text':'#EDEAE3','--muted':'#8a8f98','--dim':'#6a6f78','--dim2':'#5a5f68','--amber':'#E8A33D','--teal':'#3D7068','--red':'#C1503F','--on-accent':'#14161a','--sans':"'Inter', sans-serif" }
+  },
+  branco: {
+    name: 'Branco',
+    vars: { '--bg':'#f7f6f3','--bg2':'#ffffff','--panel':'#ffffff','--panel2':'#f1f0ec','--border':'#e3e1da','--border2':'#d3d0c7','--text':'#202226','--muted':'#6b7078','--dim':'#8a8f97','--dim2':'#9ea3aa','--amber':'#c9791a','--teal':'#2f6f5e','--red':'#b0392c','--on-accent':'#ffffff','--sans':"'Poppins', sans-serif" }
+  },
+  rosa: {
+    name: 'Rosa',
+    vars: { '--bg':'#fff2f6','--bg2':'#ffffff','--panel':'#ffe9f0','--panel2':'#ffdce8','--border':'#f6c3d6','--border2':'#eda9c4','--text':'#4a1f2e','--muted':'#96677c','--dim':'#b98a9c','--dim2':'#c9a2b2','--amber':'#d6336c','--teal':'#9c4f7c','--red':'#c0392b','--on-accent':'#ffffff','--sans':"'Quicksand', sans-serif" }
+  }
+};
+var currentTheme = 'preto';
+function applyTheme(key, skipRender){
+  var theme = THEMES[key] ? key : 'preto';
+  currentTheme = theme;
+  var vars = THEMES[theme].vars;
+  var root = document.documentElement;
+  Object.keys(vars).forEach(function(k){ root.style.setProperty(k, vars[k]); });
+  try{ localStorage.setItem(THEME_STORAGE_KEY, theme); }catch(e){}
+  if(!skipRender) render();
+}
+function loadTheme(){
+  var saved = null;
+  try{ saved = localStorage.getItem(THEME_STORAGE_KEY); }catch(e){}
+  applyTheme(saved || 'preto', true);
+}
+
+loadTheme();
+load();
+evaluateNavigationMissions(state.activeVehicleId);
+render();
+
+/* ---------- auto-paste address on return from Google Maps ---------- */
+function tryPasteAddressFromClipboard(){
+  if(!awaitingAddressPaste) return;
+  awaitingAddressPaste = false;
+  var addrInput = document.getElementById('f-address');
+  if(!addrInput) return;
+  if(navigator.clipboard && navigator.clipboard.readText){
+    navigator.clipboard.readText().then(function(text){
+      var trimmed = (text||'').trim();
+      var el = document.getElementById('f-address');
+      if(trimmed && el){
+        el.value = trimmed;
+        el.dispatchEvent(new Event('input'));
+      }
+    }).catch(function(){ /* clipboard indisponível ou sem permissão — usuário cola manualmente */ });
+  }
+}
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'visible') tryPasteAddressFromClipboard();
+});
+window.addEventListener('focus', tryPasteAddressFromClipboard);
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){ /* PWA offline indisponível — app continua funcionando normalmente online */ });
+  });
+}
+</script></body></html>
