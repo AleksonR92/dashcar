@@ -72,6 +72,13 @@
   .usage-card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px 16px; flex:1; min-width:0; }
   .odo-divider{ height:1px; background:var(--border); margin:12px 0; }
   .odo-label{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin-bottom:5px; font-weight:600; }
+  .odo-card-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:5px; }
+  .odo-card-head .odo-label{ margin-bottom:0; }
+  .odo-update-btn{
+    display:flex; align-items:center; gap:4px; background:none; border:none; color:var(--teal);
+    font-size:10.5px; font-weight:700; padding:2px 0; cursor:pointer; flex-shrink:0;
+  }
+  .odo-update-btn:active{ opacity:.7; }
   .odo-digits{ font-family:var(--mono); font-size:21px; font-weight:700; display:inline-flex; align-items:baseline; gap:2px; }
   .odo-digit{ background:var(--panel2); border:1px solid var(--border2); border-radius:4px; width:16px; height:24px; text-align:center; overflow:hidden; position:relative; }
   .odo-digit-strip{ display:block; }
@@ -376,10 +383,10 @@ const MISSIONS = [
     recurrence:{type:'days', value:7}, trigger:'navigation',
     matches:function(rec, type){ return false; } },
   { id:'calibragem-pneu', title:'Calibragem dos pneus', icon:'gauge', xp:20,
-    recurrence:{type:'days', value:10},
+    recurrence:{type:'days', value:7},
     matches:function(rec, type){ return type==='manutencao' && rec.description==='Calibragem de pneu'; } },
   { id:'nivel-oleo', title:'Nível do óleo', icon:'droplet', xp:20,
-    recurrence:{type:'km', value:1000},
+    recurrence:{type:'days', value:30},
     matches:function(rec, type){ return type==='manutencao' && rec.description==='Verificar nível de óleo'; } },
   { id:'fluido-arrefecimento', title:'Fluido de arrefecimento', icon:'droplet', xp:15,
     recurrence:{type:'days', value:30},
@@ -445,6 +452,30 @@ function evaluateMissionsForRecord(record, recordType){
         queueCelebration({ type:'levelup', level: levelAfter });
       }
     }
+  });
+}
+// Reavalia todo o histórico já registrado contra as definições atuais das missões — usado quando os prazos/critérios
+// de uma missão mudam, pra que dados já preenchidos sejam contabilizados na barra de XP sem precisar de um novo lançamento.
+// Não dispara comemoração (é uma atualização silenciosa de sistema, não uma ação do usuário no momento).
+function backfillMissions(){
+  if(!state.gamification) state.gamification = { xp:0, completions:{} };
+  state.vehicles.forEach(function(v){
+    var records = state.maintenance.filter(function(m){return m.vehicleId===v.id;}).map(function(m){return {rec:m, type:'manutencao'};})
+      .concat(state.fuel.filter(function(f){return f.vehicleId===v.id;}).map(function(f){return {rec:f, type:'combustivel'};}))
+      .concat(state.occurrences.filter(function(o){return o.vehicleId===v.id;}).map(function(o){return {rec:o, type:'ocorrencia'};}));
+    records.forEach(function(r){
+      MISSIONS.forEach(function(mission){
+        if(mission.trigger==='navigation') return; // não depende de registro nenhum
+        if(!mission.matches(r.rec, r.type)) return;
+        var pk = periodKeyForMission(mission, r.rec);
+        if(pk==null) return;
+        var key = mission.id+'|'+v.id+'|'+pk;
+        if(!state.gamification.completions[key]){
+          state.gamification.completions[key] = { date: r.rec.date, xp: mission.xp };
+          state.gamification.xp = (state.gamification.xp||0) + mission.xp;
+        }
+      });
+    });
   });
 }
 // Reverte o cumprimento de uma missão quando o registro que a justificava é excluído,
@@ -601,6 +632,7 @@ const ICONS = {
   check:'<polyline points="20 6 9 17 4 12"/>',
   settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   gauge:'<path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12 8 9"/><path d="M12 2v2"/><path d="M2 12h2"/><path d="M22 12h-2"/>',
+  edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
   wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   fuel:'<line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2 2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/>',
   plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
@@ -638,7 +670,8 @@ let state = {
   importMsg: '',
   pending: null,
   gamification: { xp: 0, completions: {} }, // completions: { 'missionId|vehicleId|periodKey': {date, xp} }
-  locations: { manutencao: [], combustivel: [], ocorrencia: [] } // locais salvos por tema: { id, name, address }
+  locations: { manutencao: [], combustivel: [], ocorrencia: [] }, // locais salvos por tema: { id, name, address }
+  odometerLogs: [] // atualizações avulsas de odômetro, independentes de manutenção/abastecimento/ocorrência: { id, vehicleId, date, odometer }
 };
 let charts = {};
 let modal = null; // 'maintenance' | 'fuel' | 'vehicle' | 'vehicle-switch' | null
@@ -655,9 +688,19 @@ let dashFilterStart = ''; // dashboard period filter — start date (YYYY-MM-DD)
 let dashFilterEnd = ''; // dashboard period filter — end date (YYYY-MM-DD) or '' for no limit
 let odoRollDelayTimer = null; // aguarda alguns segundos após salvar antes de iniciar o giro
 let pendingOdoRollAnimation = false; // sinaliza que o próximo render deve disparar a animação de rolagem
+let displayedOdo = null; // enquanto não-nulo, o cabeçalho mostra ESTE valor (o antigo) em vez do valor real,
+                         // até o giro disparar — assim o odômetro nunca "pula" instantaneamente pro novo valor
+function freezeOdoDisplay(){
+  // chamada no início de cada ação de salvar, ANTES de mutar os dados — congela o valor atual exibido
+  // (se ainda não estiver congelado) pra que o cabeçalho continue mostrando o valor antigo até o giro acontecer
+  if(displayedOdo==null && state.activeVehicleId){
+    displayedOdo = Math.round(computeStatsForVehicle(state.activeVehicleId).currentOdo||0);
+  }
+}
 function triggerOdoRoll(){
   if(odoRollDelayTimer) clearTimeout(odoRollDelayTimer);
   odoRollDelayTimer = setTimeout(function(){
+    displayedOdo = null; // libera o valor real — o giro vai revelar o novo valor a partir daqui
     pendingOdoRollAnimation = true;
     render();
   }, 2200);
@@ -915,6 +958,7 @@ function load(){
         combustivel: Array.isArray(loadedLocations.combustivel) ? loadedLocations.combustivel : [],
         ocorrencia: Array.isArray(loadedLocations.ocorrencia) ? loadedLocations.ocorrencia : []
       };
+      state.odometerLogs = Array.isArray(parsed.odometerLogs) ? parsed.odometerLogs : [];
       if(Array.isArray(parsed.vehicles)){
         state.vehicles = parsed.vehicles;
         state.activeVehicleId = parsed.activeVehicleId || (parsed.vehicles[0] && parsed.vehicles[0].id) || null;
@@ -933,7 +977,7 @@ function load(){
 function persist(){
   state.saving = true;
   try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations, odometerLogs: state.odometerLogs }));
     state.errorMsg = '';
   }catch(e){
     state.errorMsg = 'Não foi possível salvar. O armazenamento do navegador pode estar cheio ou bloqueado.';
@@ -972,10 +1016,15 @@ function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
   if(dateStart){ maint = maint.filter(function(m){return m.date>=dateStart;}); fuelList = fuelList.filter(function(f){return f.date>=dateStart;}); occList = occList.filter(function(o){return o.date>=dateStart;}); }
   if(dateEnd){ maint = maint.filter(function(m){return m.date<=dateEnd;}); fuelList = fuelList.filter(function(f){return f.date<=dateEnd;}); occList = occList.filter(function(o){return o.date<=dateEnd;}); }
 
+  var odoLogList = (state.odometerLogs||[]).filter(function(o){ return o.vehicleId === vehicleId; });
+  if(dateStart){ odoLogList = odoLogList.filter(function(o){return o.date>=dateStart;}); }
+  if(dateEnd){ odoLogList = odoLogList.filter(function(o){return o.date<=dateEnd;}); }
+
   var totalManutencao = maint.reduce(function(s,m){return s+Number(m.cost||0);},0);
   var totalCombustivel = fuelList.reduce(function(s,f){return s+Number(f.cost||0);},0);
   var allOdo = maint.map(function(m){return Number(m.odometer);})
     .concat(fuelList.map(function(f){return Number(f.odometer);}))
+    .concat(odoLogList.map(function(o){return Number(o.odometer);}))
     .filter(function(n){return !isNaN(n);});
   var initOdo = (vehicle && vehicle.initialOdometer!=null && !isNaN(Number(vehicle.initialOdometer))) ? Number(vehicle.initialOdometer) : null;
   var odoCandidates = allOdo.concat(initOdo!=null ? [initOdo] : []);
@@ -1043,9 +1092,9 @@ function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
   var occurrenceBreakdown = Object.keys(occMap).map(function(name){return {name:name, value:occMap[name]};});
 
   var totalAllCosts = Number(totalManutencao||0) + Number(totalCombustivel||0) + Number(totalCustoOcorrencias||0);
-  var costPerDay = (totalDaysUsed && totalDaysUsed>0) ? (totalAllCosts/totalDaysUsed) : null;
+  var costPerMonth = (totalDaysUsed && totalDaysUsed>0) ? (totalAllCosts/totalDaysUsed)*30 : null;
 
-  return { totalManutencao:totalManutencao, totalCombustivel:totalCombustivel, currentOdo:currentOdo, totalKmTraveled:totalKmTraveled, avgKmPerDay:avgKmPerDay, avgConsumo:avgConsumo, lastKml:lastKml, monthly:monthly, serviceBreakdown:serviceBreakdown, consumptionTrend:consumptionTrend, totalOcorrencias:totalOcorrencias, totalCustoOcorrencias:totalCustoOcorrencias, occurrenceBreakdown:occurrenceBreakdown, totalDaysUsed:totalDaysUsed, costPerDay:costPerDay };
+  return { totalManutencao:totalManutencao, totalCombustivel:totalCombustivel, currentOdo:currentOdo, totalKmTraveled:totalKmTraveled, avgKmPerDay:avgKmPerDay, avgConsumo:avgConsumo, lastKml:lastKml, monthly:monthly, serviceBreakdown:serviceBreakdown, consumptionTrend:consumptionTrend, totalOcorrencias:totalOcorrencias, totalCustoOcorrencias:totalCustoOcorrencias, occurrenceBreakdown:occurrenceBreakdown, totalDaysUsed:totalDaysUsed, costPerMonth:costPerMonth };
 }
 
 function computeStats(){
@@ -1205,7 +1254,6 @@ function deleteVehicle(id){
 }
 function selectVehicle(id){
   state.activeVehicleId = id;
-  evaluateNavigationMissions(id);
   persist();
 }
 
@@ -1213,7 +1261,7 @@ function selectVehicle(id){
 function exportData(){
   var payload = {
     appData:'controle-veiculo', version:DATA_VERSION, exportedAt:new Date().toISOString(),
-    vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, locations: state.locations
+    vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, locations: state.locations, odometerLogs: state.odometerLogs
   };
   var blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
   var url = URL.createObjectURL(blob);
@@ -1246,6 +1294,7 @@ function handleImportFile(e){
         combustivel: Array.isArray(importedLocations.combustivel) ? importedLocations.combustivel : [],
         ocorrencia: Array.isArray(importedLocations.ocorrencia) ? importedLocations.ocorrencia : []
       };
+      state.odometerLogs = Array.isArray(parsed.odometerLogs) ? parsed.odometerLogs.map(function(o){ return Object.assign({}, o, {id:o.id||uid()}); }) : [];
       if(Array.isArray(parsed.vehicles)){
         state.vehicles = parsed.vehicles.map(function(v){ return Object.assign({}, v, {id:v.id||uid()}); });
         state.activeVehicleId = parsed.activeVehicleId || (state.vehicles[0] && state.vehicles[0].id) || null;
@@ -1284,6 +1333,7 @@ function render(){
   html += (modal==='maintenance') ? renderMaintenanceForm() : '';
   html += (modal==='fuel') ? renderFuelForm() : '';
   html += (modal==='occurrence') ? renderOccurrenceForm() : '';
+  html += (modal==='odometer') ? renderOdometerForm() : '';
   html += (modal==='vehicle') ? renderVehicleForm() : '';
   html += (modal==='vehicle-switch') ? renderVehicleSwitch() : '';
   html += (modal==='settings') ? renderSettingsModal() : '';
@@ -1304,7 +1354,8 @@ function renderHeader(stats){
     ? '<img class="vehicle-photo" src="'+v.photo+'" alt="Foto do veículo">'
     : '<div class="vehicle-photo-placeholder">'+icon('car',34,'var(--dim2)')+'</div>';
   var currentOdoRounded = Math.round(stats.currentOdo||0);
-  var digits = odoDigitsHtml(currentOdoRounded);
+  var shownOdo = (displayedOdo!=null) ? displayedOdo : currentOdoRounded;
+  var digits = odoDigitsHtml(shownOdo);
   var actionBtn = state.vehicles.length===0
     ? '<button class="btn-ghost" data-action="add-vehicle">'+icon('car',12)+' Adicionar veículo</button>'
     : '<button class="btn-ghost" data-action="open-vehicle-switch">'+icon('car',12)+' Trocar veículo</button>';
@@ -1339,7 +1390,10 @@ function renderHeader(stats){
     '</div>' +
     '<div class="odo-usage-row">' +
       '<div class="odo-card">' +
-        '<div class="odo-label">Odômetro atual</div>' +
+        '<div class="odo-card-head">' +
+          '<div class="odo-label">Odômetro atual</div>' +
+          '<button class="odo-update-btn" data-action="open-odometer-form" aria-label="Atualizar odômetro">'+icon('edit',11)+' Atualizar</button>' +
+        '</div>' +
         '<span class="odo-digits">'+digits+'<span class="odo-suffix">km</span></span>' +
         '<div class="odo-divider"></div>' +
         '<div class="odo-label">Km percorrido</div>' +
@@ -1349,7 +1403,7 @@ function renderHeader(stats){
         '<div class="odo-label">Média km/dia</div>' +
         '<div class="consumo-val">'+(stats.avgKmPerDay!=null ? stats.avgKmPerDay.toLocaleString('pt-BR',{maximumFractionDigits:1})+' km' : '—')+'</div>' +
         (stats.totalDaysUsed!=null ? '<div class="consumo-sub">'+formatMonthsDays(stats.totalDaysUsed)+' no total</div>' : '') +
-        (stats.costPerDay!=null ? '<div class="consumo-sub">'+formatBRL(stats.costPerDay)+'/dia (todos os custos)</div>' : '') +
+        (stats.costPerMonth!=null ? '<div class="consumo-sub">'+formatBRL(stats.costPerMonth)+'/mês (todos os custos)</div>' : '') +
       '</div>' +
     '</div>' +
     alertsHtml +
@@ -1780,6 +1834,19 @@ function renderMaintenanceForm(){
   '</div>';
 }
 
+function renderOdometerForm(){
+  var pf = formPrefill || {};
+  return '<div class="overlay" data-action="close-modal-bg">' +
+    '<div class="sheet" onclick="event.stopPropagation()">' +
+      '<div class="sheet-head"><h2>Atualizar odômetro</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
+      '<p class="tank-hint" style="margin-top:-4px;">Atualiza só a leitura do odômetro, sem precisar registrar manutenção, abastecimento ou ocorrência.</p>' +
+      fieldHtml('Data', '<input id="f-date" type="date" value="'+esc(pf.date || new Date().toISOString().slice(0,10))+'">') +
+      odoFieldHtml(pf.odometer) +
+      '<button class="btn-primary" data-action="save-odometer">Salvar odômetro '+icon('chevron',16,'var(--on-accent)')+'</button>' +
+    '</div>' +
+  '</div>';
+}
+
 function renderOccurrenceForm(){
   var pf = formPrefill || {};
   var isEdit = !!editingOccurrenceId;
@@ -2112,13 +2179,23 @@ function attachEvents(){
   app.querySelectorAll('[data-action]').forEach(function(el){
     var action = el.getAttribute('data-action');
     el.addEventListener('click', function(e){
-      if(action==='set-tab'){ state.tab = el.getAttribute('data-tab'); render(); }
+      if(action==='set-tab'){
+        state.tab = el.getAttribute('data-tab');
+        if(state.tab==='dashboard') evaluateNavigationMissions(state.activeVehicleId);
+        render();
+      }
       else if(action==='open-form'){
         modal = state.tab==='manutencao' ? 'maintenance' : (state.tab==='ocorrencias' ? 'occurrence' : 'fuel');
         editingFuelId = null; editingMaintenanceId = null; editingOccurrenceId = null;
         var lastOdo = state.activeVehicleId ? computeStatsForVehicle(state.activeVehicleId).currentOdo : null;
         formPrefill = (lastOdo!=null && lastOdo>0) ? { odometer: lastOdo } : null;
         if(modal==='fuel') fuelGaugeFraction = 0.5;
+        render();
+      }
+      else if(action==='open-odometer-form'){
+        var lastOdoForForm = state.activeVehicleId ? computeStatsForVehicle(state.activeVehicleId).currentOdo : null;
+        formPrefill = { date: new Date().toISOString().slice(0,10), odometer: (lastOdoForForm!=null && lastOdoForForm>0) ? lastOdoForForm : null };
+        modal = 'odometer';
         render();
       }
       else if(action==='open-vehicle-switch'){ openModal('vehicle-switch'); }
@@ -2239,6 +2316,7 @@ function attachEvents(){
         var warrantyRaw = document.getElementById('f-warranty').value;
         var warrantyMonths = warrantyRaw !== '' ? parseInt(warrantyRaw, 10) : null;
         if(!date || !odo) return;
+        freezeOdoDisplay();
         var description = service==='Outro' ? (custom || 'Outro') : service;
         var isPending = addMaintenance({ date:date, description:description, cost:cost, odometer:parseKmValue(odo), address:address, notes:notes, warrantyMonths:warrantyMonths }, editingMaintenanceId);
         saveLocationIfNew('manutencao', address, addressName);
@@ -2256,9 +2334,21 @@ function attachEvents(){
         var onotes = document.getElementById('f-notes').value;
         if(!odate) return;
         var odescription = otype==='Outro' ? (ocustom || 'Outro') : otype;
+        if(oodo) freezeOdoDisplay();
         addOccurrence({ date:odate, description:odescription, cost:ocost, odometer: oodo ? parseKmValue(oodo) : null, address:oaddress, notes:onotes }, editingOccurrenceId);
         saveLocationIfNew('ocorrencia', oaddress, oaddressName);
         if(oodo) triggerOdoRoll();
+        closeModal();
+      }
+      else if(action==='save-odometer'){
+        var odoDate = document.getElementById('f-date').value;
+        var odoVal = parseKmValue(document.getElementById('f-odo').value);
+        if(!odoDate || !odoVal){ return; }
+        freezeOdoDisplay();
+        if(!state.odometerLogs) state.odometerLogs = [];
+        state.odometerLogs.push({ id: uid(), vehicleId: state.activeVehicleId, date: odoDate, odometer: odoVal });
+        triggerOdoRoll();
+        persist();
         closeModal();
       }
       else if(action==='save-fuel'){
@@ -2280,6 +2370,7 @@ function attachEvents(){
           render();
           return;
         }
+        freezeOdoDisplay();
         var isPending2 = addFuel(fuelEntry, editingFuelId);
         saveLocationIfNew('combustivel', address2, addressName2);
         triggerOdoRoll();
@@ -2539,7 +2630,7 @@ function loadTheme(){
 
 loadTheme();
 load();
-evaluateNavigationMissions(state.activeVehicleId);
+backfillMissions();
 render();
 
 /* ---------- auto-paste address on return from Google Maps ---------- */
