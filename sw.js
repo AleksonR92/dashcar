@@ -2,7 +2,7 @@
 // Estratégia: tenta buscar na rede primeiro (pra sempre pegar a versão mais nova quando online);
 // se não conseguir (sem internet), usa a cópia salva em cache — garantindo que o app abra offline.
 
-const CACHE_NAME = 'controle-veiculo-v11'; // ao publicar uma nova revisão, aumente esse número (v12, v13...)
+const CACHE_NAME = 'controle-veiculo-v12'; // ao publicar uma nova revisão, aumente esse número (v13, v14...)
 const ASSETS = [
   './',
   './index.html',

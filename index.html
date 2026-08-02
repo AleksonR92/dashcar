@@ -721,6 +721,8 @@ let state = {
 let charts = {};
 let modal = null; // 'maintenance' | 'fuel' | 'vehicle' | 'vehicle-switch' | null
 let formPrefill = null; // holds entry data to re-populate a form after "Corrigir"
+let lastGeoCoords = null; // { lat, lng } da localização usada pra preencher o campo de endereço automaticamente
+let lastGeoAddress = null; // o texto de endereço associado a lastGeoCoords — só usamos as coordenadas se o endereço não mudou
 let editingVehicleId = null; // null = creating a new vehicle in the vehicle form
 let fuelGaugeFraction = 0.5; // 0 (E) .. 1 (F), current pointer value while the fuel form is open
 let vehiclePhotoDraft = null; // base64 data URL of the vehicle photo being edited, null = none
@@ -833,6 +835,34 @@ function playCelebrationSound(type){
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 /* ---------- locais salvos (endereços) por tema: manutencao | combustivel | ocorrencia ---------- */
+const GEO_MATCH_RADIUS_M = 200; // distância máxima pra considerar que a localização atual "é" um local já salvo
+function haversineDistanceMeters(lat1, lon1, lat2, lon2){
+  var R = 6371000;
+  var toRad = function(d){ return d*Math.PI/180; };
+  var dLat = toRad(lat2-lat1);
+  var dLon = toRad(lon2-lon1);
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2);
+  var c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R*c;
+}
+function findNearestSavedLocation(category, lat, lng){
+  var list = (state.locations && state.locations[category]) || [];
+  var best = null, bestDist = Infinity;
+  list.forEach(function(loc){
+    if(loc.lat==null || loc.lng==null) return;
+    var d = haversineDistanceMeters(lat, lng, loc.lat, loc.lng);
+    if(d < bestDist){ bestDist = d; best = loc; }
+  });
+  return (best && bestDist <= GEO_MATCH_RADIUS_M) ? best : null;
+}
+function reverseGeocode(lat, lng, callback){
+  // usa o Nominatim (OpenStreetMap) — serviço gratuito de geocodificação reversa, sem precisar de chave de API
+  var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+lat+'&lon='+lng+'&zoom=18&addressdetails=1';
+  fetch(url, { headers: { 'Accept-Language': 'pt-BR' } })
+    .then(function(r){ return r.json(); })
+    .then(function(data){ callback(data && data.display_name ? data.display_name : null); })
+    .catch(function(){ callback(null); });
+}
 function findLocationByAddress(category, address){
   var list = (state.locations && state.locations[category]) || [];
   var norm = (address||'').trim().toLowerCase();
@@ -853,7 +883,10 @@ function locationDisplayName(category, address){
   var match = findLocationByAddress(category, addr);
   return match ? match.name : addr;
 }
-function saveLocationIfNew(category, address, name){
+function geoCoordsForAddress(address){
+  return (lastGeoAddress && lastGeoAddress === address && lastGeoCoords) ? lastGeoCoords : null;
+}
+function saveLocationIfNew(category, address, name, lat, lng){
   if(!state.locations) state.locations = { manutencao:[], combustivel:[], ocorrencia:[] };
   if(!state.locations[category]) state.locations[category] = [];
   var addr = (address||'').trim();
@@ -861,10 +894,13 @@ function saveLocationIfNew(category, address, name){
   var existing = findLocationByAddress(category, addr);
   if(existing){
     if(name && name.trim() && existing.name !== name.trim()){ existing.name = name.trim(); }
+    if(lat!=null && lng!=null && (existing.lat==null || existing.lng==null)){ existing.lat = lat; existing.lng = lng; }
     return;
   }
   var finalName = (name && name.trim()) ? name.trim() : addr;
-  state.locations[category].push({ id: uid(), name: finalName, address: addr });
+  var newLoc = { id: uid(), name: finalName, address: addr };
+  if(lat!=null && lng!=null){ newLoc.lat = lat; newLoc.lng = lng; }
+  state.locations[category].push(newLoc);
 }
 function resizeImageFile(file, maxDim, cb){
   try{
@@ -1841,7 +1877,7 @@ function addressFieldHtml(value, label, category){
       '<input id="f-address" data-category="'+esc(category)+'" style="flex:1;" value="'+esc(value||'')+'" placeholder="Ex: Av. Brasil 123, São Paulo">' +
       '<button type="button" class="icon-btn" data-action="find-address-maps" title="Buscar no Google Maps" style="width:40px; height:40px; flex-shrink:0;">'+icon('mappin',16)+'</button>' +
     '</div>' +
-    '<p class="tank-hint" style="margin-bottom:0;">Toque no pino para buscar no Google Maps. Ao voltar para o app, o endereço copiado é preenchido automaticamente.</p>' +
+    '<p class="tank-hint" style="margin-bottom:0;">Carregamos sua localização automaticamente quando possível. Toque no pino pra buscar/ajustar no Google Maps.</p>' +
     '<div id="f-location-name-wrap" style="display:'+(showNameField?'block':'none')+'; margin-top:10px;">' +
       '<span class="field-label" style="font-size:12px;">Como quer chamar este local? <span style="opacity:.65; font-weight:400;">(fica salvo pra próxima vez)</span></span>' +
       '<input id="f-location-name" placeholder="Ex: Oficina do João">' +
@@ -2424,7 +2460,8 @@ function attachEvents(){
           else { delete state.maintenanceIntervals[service]; }
         }
         var isPending = addMaintenance({ date:date, description:description, cost:cost, odometer:parseKmValue(odo), address:address, notes:notes, warrantyMonths:warrantyMonths }, editingMaintenanceId);
-        saveLocationIfNew('manutencao', address, addressName);
+        var geoM = geoCoordsForAddress(address);
+        saveLocationIfNew('manutencao', address, addressName, geoM ? geoM.lat : null, geoM ? geoM.lng : null);
         triggerOdoRoll();
         if(isPending) render(); else closeModal();
       }
@@ -2441,7 +2478,8 @@ function attachEvents(){
         var odescription = otype==='Outro' ? (ocustom || 'Outro') : otype;
         if(oodo) freezeOdoDisplay();
         addOccurrence({ date:odate, description:odescription, cost:ocost, odometer: oodo ? parseKmValue(oodo) : null, address:oaddress, notes:onotes }, editingOccurrenceId);
-        saveLocationIfNew('ocorrencia', oaddress, oaddressName);
+        var geoO = geoCoordsForAddress(oaddress);
+        saveLocationIfNew('ocorrencia', oaddress, oaddressName, geoO ? geoO.lat : null, geoO ? geoO.lng : null);
         if(oodo) triggerOdoRoll();
         closeModal();
       }
@@ -2477,7 +2515,8 @@ function attachEvents(){
         }
         freezeOdoDisplay();
         var isPending2 = addFuel(fuelEntry, editingFuelId);
-        saveLocationIfNew('combustivel', address2, addressName2);
+        var geoF = geoCoordsForAddress(address2);
+        saveLocationIfNew('combustivel', address2, addressName2, geoF ? geoF.lat : null, geoF ? geoF.lng : null);
         triggerOdoRoll();
         if(isPending2) render(); else closeModal();
       }
@@ -2633,6 +2672,29 @@ function attachEvents(){
         }
         refreshNameVisibility();
       });
+    }
+    // carrega a localização atual automaticamente, só quando o campo ainda está vazio (lançamento novo)
+    if(!addressEl.value && navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(function(pos){
+        var lat = pos.coords.latitude, lng = pos.coords.longitude;
+        if(addressEl.value) return; // o usuário já digitou algo enquanto a localização carregava
+        var nearest = findNearestSavedLocation(locCategory, lat, lng);
+        if(nearest){
+          addressEl.value = nearest.address;
+          lastGeoCoords = { lat: nearest.lat, lng: nearest.lng };
+          lastGeoAddress = nearest.address;
+          refreshNameVisibility();
+        } else {
+          reverseGeocode(lat, lng, function(addressText){
+            if(addressText && !addressEl.value){
+              addressEl.value = addressText;
+              lastGeoCoords = { lat: lat, lng: lng };
+              lastGeoAddress = addressText;
+              refreshNameVisibility();
+            }
+          });
+        }
+      }, function(){ /* permissão negada ou localização indisponível — segue sem preencher automaticamente */ }, { timeout: 8000 });
     }
   }
 
