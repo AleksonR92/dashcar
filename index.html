@@ -2090,7 +2090,7 @@ function renderSettingsModal(){
   });
   html += '<span class="field-label" style="display:block; margin:22px 0 6px;">Som ao navegar</span>' +
     '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:10px 12px;">' +
-      '<span style="font-size:12.5px; color:var(--muted);">Tocar som de ferramenta ao entrar na aba Manutenção</span>' +
+      '<span style="font-size:12.5px; color:var(--muted);">Tocar som de ferramenta ao salvar uma manutenção</span>' +
       '<button class="odo-quick-btn" data-action="toggle-tab-sound" style="flex:none;">'+(state.tabSoundEnabled!==false ? 'Ativado' : 'Desativado')+'</button>' +
     '</div>';
   html += '<span class="field-label" style="display:block; margin:22px 0 6px;">Conta</span>' +
@@ -2278,7 +2278,6 @@ function attachEvents(){
       }
       else if(action==='set-tab'){
         var newTab = el.getAttribute('data-tab');
-        if(newTab !== state.tab && newTab==='manutencao' && state.tabSoundEnabled!==false) playTabSound();
         state.tab = newTab;
         if(state.tab==='dashboard') evaluateNavigationMissions(state.activeVehicleId);
         render();
@@ -2416,6 +2415,7 @@ function attachEvents(){
         var warrantyMonths = warrantyRaw !== '' ? parseInt(warrantyRaw, 10) : null;
         if(!date || !odo) return;
         freezeOdoDisplay();
+        if(state.tabSoundEnabled!==false) playTabSound();
         var description = service==='Outro' ? (custom || 'Outro') : service;
         if(SERVICE_TYPES_PERIODICO.indexOf(service)!==-1){
           var intervalEl = document.getElementById('f-interval');
