@@ -102,6 +102,11 @@
   .header-actions-row .btn-ghost{ flex:none; padding:5px 10px; font-size:10.5px; }
   .odo-usage-row{ display:flex; gap:10px; margin-top:16px; align-items:stretch; }
   .odo-card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px 16px; flex:1; min-width:0; }
+  .trip-card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px 16px; text-align:center; }
+  .trip-live-label{ display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); font-weight:700; margin-bottom:10px; }
+  .trip-km{ font-family:var(--mono); font-size:32px; font-weight:800; }
+  .trip-timer{ font-family:var(--mono); font-size:14px; color:var(--dim); margin-top:4px; }
+  .trip-row{ display:flex; align-items:center; justify-content:center; gap:6px; font-size:12.5px; color:var(--muted); margin-top:10px; text-align:left; }
   .usage-card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px 16px; flex:1; min-width:0; }
   .odo-divider{ height:1px; background:var(--border); margin:12px 0; }
   .odo-label{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin-bottom:5px; font-weight:600; }
@@ -134,7 +139,8 @@
   /* ---------- tabs ---------- */
   .tabs{ display:flex; gap:4px; padding:8px; background:var(--bg2); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .tabs::-webkit-scrollbar{ display:none; }
-  .tab-btn{ flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center; gap:5px; padding:9px 4px; border-radius:8px; background:transparent; border:none; color:var(--dim); font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .tab-btn{ flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center; padding:11px 4px; border-radius:8px; background:transparent; border:none; color:var(--dim); cursor:pointer; }
+  .tab-title{ font-size:16px; font-weight:800; margin:14px 4px 8px; }
   .tab-btn .tab-label{ overflow:hidden; text-overflow:ellipsis; }
   .tab-btn.active{ background:var(--panel); color:var(--text); }
 
@@ -300,7 +306,7 @@
   @media (max-width:380px){
     .stat-grid{ gap:6px; }
     .odo-digits{ font-size:18px; }
-    .tab-btn{ font-size:10.5px; padding:8px 2px; gap:3px; }
+    .tab-btn{ padding:9px 2px; }
   }
 
   /* ---------- celebração (missão / nível) ---------- */
@@ -610,6 +616,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
+const APP_VERSION = 'rev44'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -692,6 +699,7 @@ const ICONS = {
   car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>',
   carcrash:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M13.2 1.5l1.6 2.8-2.3.5 2.9 2-2 2.4"/>',
   mappin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+  route:'<polygon points="3 11 22 2 13 21 11 13 3 11"/>',
   award:'<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>',
   zap:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
 };
@@ -716,13 +724,17 @@ let state = {
   gamification: { xp: 0, completions: {} }, // completions: { 'missionId|vehicleId|periodKey': {date, xp} }
   locations: { manutencao: [], combustivel: [], ocorrencia: [] }, // locais salvos por tema: { id, name, address }
   odometerLogs: [], // atualizações avulsas de odômetro, independentes de manutenção/abastecimento/ocorrência: { id, vehicleId, date, odometer }
-  tabSoundEnabled: true // som de ferramenta ao navegar pra aba de Manutenção
+  tabSoundEnabled: true, // som de ferramenta ao navegar pra aba de Manutenção
+  percursos: [] // viagens rastreadas por GPS: { id, vehicleId, date, startAddress, endAddress, km, startTime, endTime }
 };
 let charts = {};
 let modal = null; // 'maintenance' | 'fuel' | 'vehicle' | 'vehicle-switch' | null
 let formPrefill = null; // holds entry data to re-populate a form after "Corrigir"
 let lastGeoCoords = null; // { lat, lng } da localização usada pra preencher o campo de endereço automaticamente
 let lastGeoAddress = null; // o texto de endereço associado a lastGeoCoords — só usamos as coordenadas se o endereço não mudou
+let activeTrip = null; // percurso em andamento: { startTime, startCoords, startAddress, lastCoords, totalKm, watchId, tickTimer }
+let pendingTripSummary = null; // percurso recém-finalizado, aguardando confirmação de atualizar o odômetro ou não
+let tripError = ''; // mensagem de erro ao tentar iniciar um percurso (ex: permissão de localização negada)
 let editingVehicleId = null; // null = creating a new vehicle in the vehicle form
 let fuelGaugeFraction = 0.5; // 0 (E) .. 1 (F), current pointer value while the fuel form is open
 let vehiclePhotoDraft = null; // base64 data URL of the vehicle photo being edited, null = none
@@ -1039,6 +1051,7 @@ function applyLoadedData(parsed){
   };
   state.odometerLogs = Array.isArray(parsed.odometerLogs) ? parsed.odometerLogs : [];
   state.tabSoundEnabled = (parsed.tabSoundEnabled!==false);
+  state.percursos = Array.isArray(parsed.percursos) ? parsed.percursos : [];
   if(Array.isArray(parsed.vehicles)){
     state.vehicles = parsed.vehicles;
     state.activeVehicleId = parsed.activeVehicleId || (parsed.vehicles[0] && parsed.vehicles[0].id) || null;
@@ -1060,7 +1073,7 @@ function load(){
   }catch(e){ applyDefaultMaintenanceIntervals(); /* start empty */ }
 }
 function buildSyncPayload(){
-  return { maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations, odometerLogs: state.odometerLogs, tabSoundEnabled: state.tabSoundEnabled };
+  return { maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations, odometerLogs: state.odometerLogs, tabSoundEnabled: state.tabSoundEnabled, percursos: state.percursos };
 }
 function persistToCloud(){
   if(!authUser || !window.__fb) return;
@@ -1423,8 +1436,9 @@ function render(){
   var html = '';
   html += renderHeader(stats);
   html += renderTabs();
+  html += renderTabTitle();
   html += '<div class="content">'+renderContent(stats, dashboardStats)+'</div>';
-  html += (state.tab !== 'dashboard' && state.tab !== 'missoes' && state.activeVehicleId) ? renderFAB() : '';
+  html += (state.tab !== 'dashboard' && state.tab !== 'missoes' && state.tab !== 'percurso' && state.activeVehicleId) ? renderFAB() : '';
   html += (modal==='maintenance') ? renderMaintenanceForm() : '';
   html += (modal==='fuel') ? renderFuelForm() : '';
   html += (modal==='occurrence') ? renderOccurrenceForm() : '';
@@ -1541,16 +1555,21 @@ function renderTabs(){
     {key:'manutencao', label:'Manutenção', ic:'wrench', color:'var(--amber)'},
     {key:'abastecimento', label:'Abastecimento', ic:'fuel', color:'var(--teal)'},
     {key:'ocorrencias', label:'Ocorrências', ic:'alert', color:'var(--red)'},
+    {key:'percurso', label:'Percurso', ic:'route', color:'var(--teal)'},
     {key:'missoes', label:'Missões', ic:'award', color:'var(--amber)'},
     {key:'dashboard', label:'Dashboard', ic:'dash', color:'var(--muted)'}
   ];
   var html = '<div class="tabs">';
   tabs.forEach(function(t){
-    html += '<button class="tab-btn '+(state.tab===t.key?'active':'')+'" data-action="set-tab" data-tab="'+t.key+'">'+
-      icon(t.ic,14, state.tab===t.key ? t.color : 'var(--dim)')+' <span class="tab-label">'+t.label+'</span></button>';
+    html += '<button class="tab-btn '+(state.tab===t.key?'active':'')+'" data-action="set-tab" data-tab="'+t.key+'" aria-label="'+esc(t.label)+'">'+
+      icon(t.ic,18, state.tab===t.key ? t.color : 'var(--dim)')+'</button>';
   });
   html += '</div>';
   return html;
+}
+function renderTabTitle(){
+  var titles = { manutencao:'Manutenção', abastecimento:'Abastecimento', ocorrencias:'Ocorrências', percurso:'Percurso', missoes:'Missões', dashboard:'Dashboard' };
+  return '<h2 class="tab-title">'+(titles[state.tab]||'')+'</h2>';
 }
 
 function renderContent(stats, dashboardStats){
@@ -1558,7 +1577,158 @@ function renderContent(stats, dashboardStats){
   if(state.tab==='manutencao') return renderMaintenanceList();
   if(state.tab==='ocorrencias') return renderOccurrenceList();
   if(state.tab==='missoes') return renderMissions();
+  if(state.tab==='percurso') return renderPercursoTab();
   return renderFuelList();
+}
+
+function renderPercursoTab(){
+  if(!state.activeVehicleId){
+    return '<div class="empty">' +
+      '<div class="empty-icon">'+icon('car',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhum veículo cadastrado</p>' +
+      '<p class="empty-sub">Cadastre um veículo para rastrear percursos.</p>' +
+    '</div>';
+  }
+  var html = '';
+  if(pendingTripSummary){
+    var t = pendingTripSummary;
+    html += '<div class="trip-card">' +
+      '<div class="trip-km">'+t.km.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' km</div>' +
+      '<div class="trip-row">'+icon('mappin',12,'var(--teal)')+'<span>De: '+esc(t.startAddress)+'</span></div>' +
+      '<div class="trip-row">'+icon('mappin',12,'var(--red)')+'<span>Até: '+esc(t.endAddress)+'</span></div>' +
+      '<button class="btn-primary" style="width:100%; justify-content:center; margin-top:16px;" data-action="commit-trip-yes">Somar '+t.km.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' km ao odômetro</button>' +
+      '<button class="btn-ghost" style="width:100%; justify-content:center; margin-top:8px;" data-action="commit-trip-no">Não, só salvar o percurso</button>' +
+    '</div>';
+  } else if(activeTrip){
+    var elapsedSec = Math.max(0, Math.floor((Date.now()-activeTrip.startTime)/1000));
+    var mm = Math.floor(elapsedSec/60), ss = elapsedSec%60;
+    var mmStr = (mm<10?'0':'')+mm, ssStr = (ss<10?'0':'')+ss;
+    html += '<div class="trip-card">' +
+      '<div class="trip-live-label">'+icon('route',12,'var(--teal)')+' Percurso em andamento</div>' +
+      '<div class="trip-km">'+activeTrip.totalKm.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+' km</div>' +
+      '<div class="trip-timer">'+mmStr+':'+ssStr+'</div>' +
+      '<div class="trip-row">'+icon('mappin',12,'var(--teal)')+'<span>'+(activeTrip.startAddress ? esc(activeTrip.startAddress) : 'Localizando ponto de partida…')+'</span></div>' +
+      '<button class="btn-primary" style="width:100%; justify-content:center; margin-top:16px;" data-action="finish-trip">Finalizar percurso</button>' +
+    '</div>';
+  } else {
+    html += '<button class="btn-primary" style="width:100%; justify-content:center; margin-bottom:10px;" data-action="start-trip">'+icon('route',16,'var(--on-accent)')+' Iniciar percurso</button>';
+    if(tripError) html += '<p style="color:var(--red); font-size:12px; margin:0 0 14px;">'+esc(tripError)+'</p>';
+  }
+
+  var myTrips = (state.percursos||[]).filter(function(p){ return p.vehicleId===state.activeVehicleId; })
+    .slice().sort(function(a,b){ return (b.startTime||0)-(a.startTime||0); });
+
+  if(myTrips.length){
+    html += '<div class="list" style="margin-top:18px;">';
+    myTrips.forEach(function(p){
+      html += '<div class="card">' +
+        '<div class="card-main">' +
+          '<div class="card-title">'+formatKm(p.km)+'</div>' +
+          '<div class="card-meta"><span>'+icon('calendar',11)+' '+formatDate(p.date)+'</span></div>' +
+          '<div class="card-meta"><span>'+icon('mappin',11,'var(--teal)')+' '+esc(p.startAddress)+'</span></div>' +
+          '<div class="card-meta"><span>'+icon('mappin',11,'var(--red)')+' '+esc(p.endAddress)+'</span></div>' +
+        '</div>' +
+        '<div class="card-side">' +
+          '<button class="card-del" data-action="del-percurso" data-id="'+p.id+'">'+icon('x',15)+'</button>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+  } else if(!activeTrip && !pendingTripSummary){
+    html += '<div class="empty">' +
+      '<div class="empty-icon">'+icon('route',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhum percurso registrado</p>' +
+      '<p class="empty-sub">Toque em "Iniciar percurso" pra começar a rastrear pelo GPS.</p>' +
+    '</div>';
+  }
+  return html;
+}
+
+/* ---------- rastreamento de percurso por GPS ---------- */
+function startTrip(){
+  tripError = '';
+  if(!navigator.geolocation){
+    tripError = 'Este navegador não oferece acesso à localização.';
+    render();
+    return;
+  }
+  activeTrip = { startTime: Date.now(), startCoords: null, startAddress: null, lastCoords: null, totalKm: 0, watchId: null, tickTimer: null, vehicleId: state.activeVehicleId };
+  render();
+  navigator.geolocation.getCurrentPosition(function(pos){
+    if(!activeTrip) return;
+    var lat = pos.coords.latitude, lng = pos.coords.longitude;
+    activeTrip.startCoords = { lat:lat, lng:lng };
+    activeTrip.lastCoords = { lat:lat, lng:lng };
+    render();
+    reverseGeocode(lat, lng, function(addr){
+      if(activeTrip){ activeTrip.startAddress = addr || 'Local de partida não identificado'; render(); }
+    });
+    beginTripWatch();
+  }, function(){
+    activeTrip = null;
+    tripError = 'Não foi possível obter sua localização. Verifique a permissão de GPS do navegador.';
+    render();
+  }, { enableHighAccuracy:true, timeout:10000 });
+}
+function beginTripWatch(){
+  if(!activeTrip) return;
+  activeTrip.watchId = navigator.geolocation.watchPosition(function(pos){
+    if(!activeTrip) return;
+    var lat = pos.coords.latitude, lng = pos.coords.longitude;
+    var acc = pos.coords.accuracy;
+    if(acc!=null && acc>50) return; // fix impreciso demais — ignora pra não somar ruído de GPS
+    if(activeTrip.lastCoords){
+      var distM = haversineDistanceMeters(activeTrip.lastCoords.lat, activeTrip.lastCoords.lng, lat, lng);
+      if(distM>8){ // ignora tremulação de GPS parado (carro estacionado, sinal instável)
+        activeTrip.totalKm += distM/1000;
+        activeTrip.lastCoords = { lat:lat, lng:lng };
+        render();
+      }
+    } else {
+      activeTrip.lastCoords = { lat:lat, lng:lng };
+    }
+  }, function(){ /* erro pontual de GPS — mantém o percurso, só não atualiza nesse instante */ }, { enableHighAccuracy:true, maximumAge:2000, timeout:15000 });
+  activeTrip.tickTimer = setInterval(function(){ if(state.tab==='percurso' && activeTrip) render(); }, 1000);
+}
+function finishTrip(){
+  if(!activeTrip) return;
+  if(activeTrip.watchId!=null) navigator.geolocation.clearWatch(activeTrip.watchId);
+  if(activeTrip.tickTimer) clearInterval(activeTrip.tickTimer);
+  var endCoords = activeTrip.lastCoords;
+  var summary = {
+    id: uid(), vehicleId: activeTrip.vehicleId, date: new Date().toISOString().slice(0,10),
+    startTime: activeTrip.startTime, endTime: Date.now(),
+    startAddress: activeTrip.startAddress || 'Local de partida não identificado',
+    endAddress: 'Buscando endereço final…',
+    km: Math.round(activeTrip.totalKm*10)/10
+  };
+  activeTrip = null;
+  pendingTripSummary = summary;
+  render();
+  if(endCoords){
+    reverseGeocode(endCoords.lat, endCoords.lng, function(addr){
+      if(pendingTripSummary===summary){ summary.endAddress = addr || 'Local final não identificado'; render(); }
+    });
+  } else {
+    summary.endAddress = 'Local final não identificado';
+    render();
+  }
+}
+function commitTrip(updateOdo){
+  if(!pendingTripSummary) return;
+  var t = pendingTripSummary;
+  if(!state.percursos) state.percursos = [];
+  state.percursos.push({ id:t.id, vehicleId:t.vehicleId, date:t.date, startAddress:t.startAddress, endAddress:t.endAddress, km:t.km, startTime:t.startTime, endTime:t.endTime });
+  if(updateOdo && t.vehicleId){
+    var lastOdo = computeStatsForVehicle(t.vehicleId).currentOdo;
+    var newOdo = Math.round((lastOdo||0) + t.km);
+    freezeOdoDisplay();
+    if(!state.odometerLogs) state.odometerLogs = [];
+    state.odometerLogs.push({ id: uid(), vehicleId: t.vehicleId, date: t.date, odometer: newOdo });
+    triggerOdoRoll();
+  }
+  pendingTripSummary = null;
+  persist();
 }
 
 function renderMissions(){
@@ -2134,10 +2304,10 @@ function renderSettingsModal(){
       '<span style="font-size:12.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc((authUser && (authUser.email||authUser.displayName)) || '')+'</span>' +
       '<button class="odo-quick-btn" data-action="sign-out" style="flex:none;">Sair</button>' +
     '</div>';
+  html += '<div style="text-align:center; margin-top:24px; font-size:10.5px; color:var(--dim2);">Versão '+esc(APP_VERSION)+'</div>';
   html += '</div></div>';
   return html;
 }
-
 function renderVehicleSwitch(){
   var html = '<div class="overlay" data-action="close-modal-bg">' +
     '<div class="sheet" onclick="event.stopPropagation()">' +
@@ -2310,6 +2480,15 @@ function attachEvents(){
       }
       else if(action==='toggle-tab-sound'){
         state.tabSoundEnabled = (state.tabSoundEnabled===false);
+        persist();
+      }
+      else if(action==='start-trip'){ startTrip(); }
+      else if(action==='finish-trip'){ finishTrip(); }
+      else if(action==='commit-trip-yes'){ commitTrip(true); }
+      else if(action==='commit-trip-no'){ commitTrip(false); }
+      else if(action==='del-percurso'){
+        var pid = el.getAttribute('data-id');
+        state.percursos = (state.percursos||[]).filter(function(p){ return p.id!==pid; });
         persist();
       }
       else if(action==='set-tab'){
