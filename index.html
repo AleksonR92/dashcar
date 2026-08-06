@@ -436,10 +436,10 @@ const MISSIONS = [
     recurrence:{type:'days', value:7},
     matches:function(rec, type){ return type==='manutencao' && rec.description==='Calibragem de pneu'; } },
   { id:'nivel-oleo', title:'Nível do óleo', icon:'droplet', xp:20,
-    recurrence:{type:'days', value:30},
+    recurrence:{type:'days', value:7},
     matches:function(rec, type){ return type==='manutencao' && rec.description==='Verificar nível de óleo'; } },
   { id:'fluido-arrefecimento', title:'Fluido de arrefecimento', icon:'droplet', xp:15,
-    recurrence:{type:'days', value:30},
+    recurrence:{type:'days', value:7},
     matches:function(rec, type){ return type==='manutencao' && rec.description==='Verificar nível do fluido de arrefecimento'; } },
   { id:'limpeza', title:'Limpeza', icon:'car', xp:10,
     recurrence:{type:'days', value:30},
@@ -656,10 +656,10 @@ function computeMissionStatus(mission, vehicleId){
     subtitle = done ? 'Concluída hoje' : 'Ainda pendente hoje';
   } else if(mission.recurrence.type==='days'){
     if(done){ subtitle = 'Em dia neste período'+(periodLabel(mission) ? ' ('+periodLabel(mission)+')' : ''); }
-    else if(lastMatch){
-      var daysAgo = Math.round((Date.now() - new Date(lastMatch.rec.date+'T00:00:00').getTime())/86400000);
-      subtitle = 'Última vez há '+daysAgo+' dia(s) · repete a cada '+mission.recurrence.value+' dias';
-    } else { subtitle = 'Nunca registrada · repete a cada '+mission.recurrence.value+' dias'; }
+    else {
+      var daysLeft = (Number(nowKey)+1)*mission.recurrence.value - dayNumber(new Date().toISOString().slice(0,10));
+      subtitle = (daysLeft<=0 ? 'Vence hoje' : 'Vence em '+daysLeft+' dia(s)')+' · repete a cada '+mission.recurrence.value+' dias';
+    }
   } else if(mission.recurrence.type==='km'){
     if(done){ subtitle = 'Em dia neste período'; }
     else if(lastMatch && !isNaN(Number(lastMatch.rec.odometer))){
@@ -672,7 +672,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev46'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev47'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
