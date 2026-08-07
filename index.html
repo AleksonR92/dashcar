@@ -629,6 +629,31 @@ function backfillMissions(){
 }
 // Reverte o cumprimento de uma missão quando o registro que a justificava é excluído,
 // descontando o XP concedido — mas só se nenhum outro registro remanescente ainda a justificar.
+// Recalcula do zero o estado de sequência (streak) de uma missão, a partir de quais períodos ainda têm
+// conquista registrada — usado depois de excluir um registro, pra que buracos na sequência sejam
+// reconhecidos corretamente (em vez de o app continuar contando como se nada tivesse sido excluído).
+function recomputeStreakForMission(missionId, vehicleId){
+  if(!state.gamification || !state.gamification.completions) return;
+  var mission = MISSIONS.filter(function(m){ return m.id===missionId; })[0];
+  if(!mission) return;
+  var prefix = missionId+'|'+vehicleId+'|';
+  var periodKeys = Object.keys(state.gamification.completions)
+    .filter(function(k){ return k.indexOf(prefix)===0; })
+    .map(function(k){ return k.slice(prefix.length); })
+    .sort();
+  var streakKey = missionId+'|'+vehicleId;
+  if(!state.gamification.streaks) state.gamification.streaks = {};
+  if(periodKeys.length===0){
+    delete state.gamification.streaks[streakKey];
+    return;
+  }
+  var count = 1;
+  for(var i=1;i<periodKeys.length;i++){
+    var prevExpected = previousPeriodKey(mission, periodKeys[i]);
+    count = (prevExpected===periodKeys[i-1]) ? (count+1) : 1;
+  }
+  state.gamification.streaks[streakKey] = { count: count, lastPeriodKey: periodKeys[periodKeys.length-1] };
+}
 function revokeMissionsForRecord(record, recordType){
   if(!record || !record.vehicleId) return;
   if(!state.gamification || !state.gamification.completions) return;
@@ -652,6 +677,7 @@ function revokeMissionsForRecord(record, recordType){
       var xpToRemove = completion.xp || mission.xp;
       delete state.gamification.completions[key];
       state.gamification.xp = Math.max(0, (state.gamification.xp||0) - xpToRemove);
+      recomputeStreakForMission(mission.id, record.vehicleId);
     }
   });
 }
@@ -748,7 +774,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev48'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev50'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1747,8 +1773,8 @@ function renderPercursoTab(){
   } else if(awaitingTripStartConfirm){
     html += '<div class="trip-card">' +
       '<p style="font-size:13.5px; color:var(--text); margin:0 0 16px; line-height:1.5;">Antes de começar, quer atualizar o odômetro atual do veículo?</p>' +
-      '<button class="btn-primary" style="width:100%; justify-content:center;" data-action="start-trip-open-odometer">Atualizar odômetro</button>' +
-      '<button class="btn-ghost" style="width:100%; justify-content:center; margin-top:8px;" data-action="confirm-start-trip">Não, iniciar percurso</button>' +
+      '<button class="btn-primary" style="width:100%; justify-content:center;" data-action="confirm-start-trip">Iniciar percurso</button>' +
+      '<button class="btn-ghost" style="width:100%; justify-content:center; margin-top:8px;" data-action="start-trip-open-odometer">Editar odômetro</button>' +
       '<button class="btn-ghost" style="width:100%; justify-content:center; margin-top:8px;" data-action="cancel-trip-start">Cancelar</button>' +
     '</div>';
   } else {
