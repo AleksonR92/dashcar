@@ -453,9 +453,53 @@ const MISSIONS = [
     valueOf:function(rec){ return Number(rec.km||0); } }
 ];
 function dayNumber(dateStr){ return Math.floor(new Date(dateStr+'T00:00:00').getTime() / 86400000); }
+// chave da SEMANA de calendário (domingo a sábado) a que uma data pertence — usa a data do domingo como identificador
+function weekKeyFor(dateStr){
+  var d = new Date(dateStr+'T00:00:00');
+  d.setDate(d.getDate() - d.getDay());
+  return d.toISOString().slice(0,10);
+}
+// chave do MÊS de calendário a que uma data pertence — 'YYYY-MM'
+function monthKeyFor(dateStr){ return dateStr.slice(0,7); }
+// último dia (YYYY-MM-DD) da semana ou mês de calendário corrente, usado pra calcular "vence em X dias"
+function periodEndDate(mission){
+  var today = new Date().toISOString().slice(0,10);
+  if(mission.recurrence.value===7){
+    var d = new Date(weekKeyFor(today)+'T00:00:00');
+    d.setDate(d.getDate()+6);
+    return d.toISOString().slice(0,10);
+  }
+  if(mission.recurrence.value===30){
+    var d2 = new Date(today+'T00:00:00');
+    var lastDay = new Date(d2.getFullYear(), d2.getMonth()+1, 0);
+    return lastDay.toISOString().slice(0,10);
+  }
+  return null;
+}
+// qual seria a chave do período ANTERIOR a esta — usado pra checar se duas conclusões são consecutivas (sequência/streak)
+function previousPeriodKey(mission, key){
+  if(key==null) return null;
+  if(mission.recurrence.value===7){
+    var d = new Date(key+'T00:00:00');
+    d.setDate(d.getDate()-7);
+    return d.toISOString().slice(0,10);
+  }
+  if(mission.recurrence.value===30){
+    var parts = key.split('-');
+    var y = Number(parts[0]), m = Number(parts[1])-1;
+    if(m<1){ m=12; y-=1; }
+    return y+'-'+(m<10?'0':'')+m;
+  }
+  var n = Number(key);
+  return isNaN(n) ? null : String(n-1);
+}
 function periodKeyForMission(mission, record){
   if(mission.recurrence.type==='daily') return record.date;
-  if(mission.recurrence.type==='days') return String(Math.floor(dayNumber(record.date) / mission.recurrence.value));
+  if(mission.recurrence.type==='days'){
+    if(mission.recurrence.value===7) return weekKeyFor(record.date);
+    if(mission.recurrence.value===30) return monthKeyFor(record.date);
+    return String(Math.floor(dayNumber(record.date) / mission.recurrence.value)); // prazos customizados continuam em blocos corridos
+  }
   if(mission.recurrence.type==='km'){
     var odo = Number(record.odometer);
     if(isNaN(odo)) return null;
@@ -486,17 +530,42 @@ function getLevelTier(level){
   if(level>=5) return { name:'Prata', gradient:'linear-gradient(135deg,#e5e7eb,#94a3b8)' };
   return { name:'Bronze', gradient:'linear-gradient(135deg,#e3a469,#a5672c)' };
 }
+// Concede o XP de uma missão cumprida num período, aplicando bônus de SEQUÊNCIA (streak):
+// cada período consecutivo cumprido (sem pular nenhum) aumenta o XP ganho em +20% do valor base da missão,
+// até um teto de +5 níveis (ou seja, no máximo o dobro do XP base). Se a sequência for quebrada — ou seja,
+// o período concedido não é imediatamente seguinte ao último concedido — a sequência reinicia em 1
+// e a pontuação volta ao valor base da missão.
+function grantMissionCompletion(mission, vehicleId, periodKey, recordDate){
+  if(!state.gamification) state.gamification = { xp:0, completions:{}, streaks:{} };
+  if(!state.gamification.streaks) state.gamification.streaks = {};
+  var key = mission.id+'|'+vehicleId+'|'+periodKey;
+  if(state.gamification.completions[key]) return null; // já concedida nesse período
+
+  var streakKey = mission.id+'|'+vehicleId;
+  var streakInfo = state.gamification.streaks[streakKey] || { count:0, lastPeriodKey:null };
+  var isConsecutive = streakInfo.lastPeriodKey!=null && streakInfo.lastPeriodKey===previousPeriodKey(mission, periodKey);
+  var newCount = isConsecutive ? streakInfo.count+1 : 1;
+
+  var bonusSteps = Math.min(newCount-1, 5); // trava o bônus em +5 níveis (+100% do XP base)
+  var awardedXp = mission.xp + bonusSteps*Math.round(mission.xp*0.2);
+
+  var levelBefore = getLevelInfo(state.gamification.xp).level;
+  state.gamification.completions[key] = { date: recordDate, xp: awardedXp, streak: newCount };
+  state.gamification.xp = (state.gamification.xp||0) + awardedXp;
+  state.gamification.streaks[streakKey] = { count: newCount, lastPeriodKey: periodKey };
+  var levelAfter = getLevelInfo(state.gamification.xp).level;
+
+  return { xp: awardedXp, streak: newCount, levelBefore: levelBefore, levelAfter: levelAfter };
+}
 // Registra automaticamente o cumprimento de missões quando um novo lançamento é salvo.
 // Cada (missão + veículo + período) só concede XP uma única vez.
 function evaluateMissionsForRecord(record, recordType){
   if(!record || !record.vehicleId) return;
-  if(!state.gamification) state.gamification = { xp:0, completions:{} };
+  if(!state.gamification) state.gamification = { xp:0, completions:{}, streaks:{} };
   MISSIONS.forEach(function(mission){
     if(!mission.matches(record, recordType)) return;
     var pk = periodKeyForMission(mission, record);
     if(pk==null) return;
-    var key = mission.id+'|'+record.vehicleId+'|'+pk;
-    if(state.gamification.completions[key]) return; // já concedida nesse período
 
     if(mission.cumulative){
       var all = getRecordsForType(record.vehicleId, recordType).filter(function(r){
@@ -506,13 +575,11 @@ function evaluateMissionsForRecord(record, recordType){
       if(sum < mission.target) return; // ainda não bateu a meta neste período
     }
 
-    var levelBefore = getLevelInfo(state.gamification.xp).level;
-    state.gamification.completions[key] = { date: record.date, xp: mission.xp };
-    state.gamification.xp = (state.gamification.xp||0) + mission.xp;
-    var levelAfter = getLevelInfo(state.gamification.xp).level;
-    queueCelebration({ type:'mission', title: mission.title, xp: mission.xp, icon: mission.icon });
-    if(levelAfter > levelBefore){
-      queueCelebration({ type:'levelup', level: levelAfter });
+    var result = grantMissionCompletion(mission, record.vehicleId, pk, record.date);
+    if(!result) return;
+    queueCelebration({ type:'mission', title: mission.title, xp: result.xp, icon: mission.icon });
+    if(result.levelAfter > result.levelBefore){
+      queueCelebration({ type:'levelup', level: result.levelAfter });
     }
   });
 }
@@ -525,31 +592,37 @@ function getRecordsForType(vehicleId, type){
 }
 // Reavalia todo o histórico já registrado contra as definições atuais das missões — usado quando os prazos/critérios
 // de uma missão mudam, pra que dados já preenchidos sejam contabilizados na barra de XP sem precisar de um novo lançamento.
+// Processa os registros em ORDEM CRONOLÓGICA por missão, pra que o bônus de sequência seja reconstruído corretamente.
 // Não dispara comemoração (é uma atualização silenciosa de sistema, não uma ação do usuário no momento).
 function backfillMissions(){
-  if(!state.gamification) state.gamification = { xp:0, completions:{} };
+  if(!state.gamification) state.gamification = { xp:0, completions:{}, streaks:{} };
+  if(!state.gamification.streaks) state.gamification.streaks = {};
   state.vehicles.forEach(function(v){
-    var records = state.maintenance.filter(function(m){return m.vehicleId===v.id;}).map(function(m){return {rec:m, type:'manutencao'};})
-      .concat(state.fuel.filter(function(f){return f.vehicleId===v.id;}).map(function(f){return {rec:f, type:'combustivel'};}))
-      .concat(state.occurrences.filter(function(o){return o.vehicleId===v.id;}).map(function(o){return {rec:o, type:'ocorrencia'};}))
-      .concat((state.percursos||[]).filter(function(p){return p.vehicleId===v.id;}).map(function(p){return {rec:p, type:'percurso'};}));
-    records.forEach(function(r){
-      MISSIONS.forEach(function(mission){
-        if(mission.trigger==='navigation') return; // não depende de registro nenhum
-        if(!mission.matches(r.rec, r.type)) return;
-        var pk = periodKeyForMission(mission, r.rec);
+    MISSIONS.forEach(function(mission){
+      if(mission.trigger==='navigation') return; // não depende de nenhum registro
+      var matchingRecords = [];
+      ['manutencao','combustivel','ocorrencia','percurso'].forEach(function(type){
+        getRecordsForType(v.id, type).forEach(function(r){
+          if(mission.matches(r, type)) matchingRecords.push(r);
+        });
+      });
+      if(!matchingRecords.length) return;
+      matchingRecords.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+
+      var periodsInOrder = [];
+      var periodSums = {};
+      var periodLastDate = {};
+      matchingRecords.forEach(function(r){
+        var pk = periodKeyForMission(mission, r);
         if(pk==null) return;
-        var key = mission.id+'|'+v.id+'|'+pk;
-        if(state.gamification.completions[key]) return;
-        if(mission.cumulative){
-          var all = getRecordsForType(v.id, r.type).filter(function(rr){
-            return mission.matches(rr, r.type) && periodKeyForMission(mission, rr)===pk;
-          });
-          var sum = all.reduce(function(s,rr){ return s + mission.valueOf(rr); }, 0);
-          if(sum < mission.target) return;
-        }
-        state.gamification.completions[key] = { date: r.rec.date, xp: mission.xp };
-        state.gamification.xp = (state.gamification.xp||0) + mission.xp;
+        if(!(pk in periodSums)){ periodSums[pk] = 0; periodsInOrder.push(pk); }
+        if(mission.cumulative) periodSums[pk] += mission.valueOf(r);
+        periodLastDate[pk] = r.date; // mantém a data do lançamento mais recente daquele período
+      });
+
+      periodsInOrder.forEach(function(pk){
+        if(mission.cumulative && periodSums[pk] < mission.target) return;
+        grantMissionCompletion(mission, v.id, pk, periodLastDate[pk]);
       });
     });
   });
@@ -582,28 +655,32 @@ function revokeMissionsForRecord(record, recordType){
     }
   });
 }
-function periodKeyNow(mission){
+function periodKeyNow(mission, vehicleId){
   if(mission.recurrence.type==='daily') return new Date().toISOString().slice(0,10);
-  if(mission.recurrence.type==='days') return String(Math.floor(dayNumber(new Date().toISOString().slice(0,10)) / mission.recurrence.value));
+  if(mission.recurrence.type==='days'){
+    var today = new Date().toISOString().slice(0,10);
+    if(mission.recurrence.value===7) return weekKeyFor(today);
+    if(mission.recurrence.value===30) return monthKeyFor(today);
+    return String(Math.floor(dayNumber(today) / mission.recurrence.value));
+  }
+  if(mission.recurrence.type==='km' && vehicleId){
+    var stats = computeStatsForVehicle(vehicleId);
+    return String(Math.floor(stats.currentOdo / mission.recurrence.value));
+  }
   return null;
 }
 function evaluateNavigationMissions(vehicleId){
   if(!vehicleId) return;
-  if(!state.gamification) state.gamification = { xp:0, completions:{} };
+  if(!state.gamification) state.gamification = { xp:0, completions:{}, streaks:{} };
   MISSIONS.forEach(function(mission){
     if(mission.trigger !== 'navigation') return;
-    var pk = periodKeyNow(mission);
+    var pk = periodKeyNow(mission, vehicleId);
     if(pk==null) return;
-    var key = mission.id+'|'+vehicleId+'|'+pk;
-    if(!state.gamification.completions[key]){
-      var levelBefore = getLevelInfo(state.gamification.xp).level;
-      state.gamification.completions[key] = { date: new Date().toISOString().slice(0,10), xp: mission.xp };
-      state.gamification.xp = (state.gamification.xp||0) + mission.xp;
-      var levelAfter = getLevelInfo(state.gamification.xp).level;
-      queueCelebration({ type:'mission', title: mission.title, xp: mission.xp, icon: mission.icon });
-      if(levelAfter > levelBefore){
-        queueCelebration({ type:'levelup', level: levelAfter });
-      }
+    var result = grantMissionCompletion(mission, vehicleId, pk, new Date().toISOString().slice(0,10));
+    if(!result) return;
+    queueCelebration({ type:'mission', title: mission.title, xp: result.xp, icon: mission.icon });
+    if(result.levelAfter > result.levelBefore){
+      queueCelebration({ type:'levelup', level: result.levelAfter });
     }
   });
 }
@@ -629,15 +706,7 @@ function computeMissionStatus(mission, vehicleId){
     .concat(state.occurrences.filter(function(o){return o.vehicleId===vehicleId;}).map(function(o){return {rec:o, type:'ocorrencia'};}))
     .concat((state.percursos||[]).filter(function(p){return p.vehicleId===vehicleId;}).map(function(p){return {rec:p, type:'percurso'};}));
   var matching = records.filter(function(r){ return mission.matches(r.rec, r.type); });
-  var nowKey;
-  if(mission.recurrence.type==='daily'){
-    nowKey = new Date().toISOString().slice(0,10);
-  } else if(mission.recurrence.type==='days'){
-    nowKey = String(Math.floor(dayNumber(new Date().toISOString().slice(0,10)) / mission.recurrence.value));
-  } else if(mission.recurrence.type==='km'){
-    var stats = computeStatsForVehicle(vehicleId);
-    nowKey = String(Math.floor(stats.currentOdo / mission.recurrence.value));
-  }
+  var nowKey = periodKeyNow(mission, vehicleId);
   var done = !!(state.gamification && state.gamification.completions[mission.id+'|'+vehicleId+'|'+nowKey]);
   var lastMatch = matching.length ? matching.reduce(function(a,b){ return (!a || b.rec.date>a.rec.date) ? b : a; }, null) : null;
   var subtitle;
@@ -645,20 +714,27 @@ function computeMissionStatus(mission, vehicleId){
     var matchingNow = matching.filter(function(r){ return periodKeyForMission(mission, r.rec)===nowKey; });
     var sumNow = matchingNow.reduce(function(s,r){ return s + mission.valueOf(r.rec); }, 0);
     var progressPct = Math.max(0, Math.min(100, Math.round((sumNow/mission.target)*100)));
+    var completionNow = state.gamification && state.gamification.completions[mission.id+'|'+vehicleId+'|'+nowKey];
+    var streakTxtCum = (completionNow && completionNow.streak>1) ? (' · 🔥 '+completionNow.streak+'x seguidas') : '';
     subtitle = done
-      ? ('Meta batida: '+formatKm(mission.target)+' neste período'+(periodLabel(mission) ? ' ('+periodLabel(mission)+')' : ''))
+      ? ('Meta batida: '+formatKm(mission.target)+' neste período'+(periodLabel(mission) ? ' ('+periodLabel(mission)+')' : '')+streakTxtCum)
       : (formatKm(sumNow)+' de '+formatKm(mission.target)+' neste período');
     return { done: done, subtitle: subtitle, xp: mission.xp, cumulative:true, progressPct: progressPct };
   }
   if(mission.trigger==='navigation'){
-    subtitle = done ? ('Concluída neste período'+(periodLabel(mission) ? ' ('+periodLabel(mission)+')' : '')) : 'Basta abrir o app · repete a cada '+mission.recurrence.value+' dias';
+    var navCompletion = state.gamification && state.gamification.completions[mission.id+'|'+vehicleId+'|'+nowKey];
+    var navStreakTxt = (navCompletion && navCompletion.streak>1) ? (' · 🔥 '+navCompletion.streak+'x seguidas') : '';
+    subtitle = done ? ('Concluída neste período'+(periodLabel(mission) ? ' ('+periodLabel(mission)+')' : '')+navStreakTxt) : 'Basta abrir o app · repete a cada '+mission.recurrence.value+' dias';
   } else if(mission.recurrence.type==='daily'){
     subtitle = done ? 'Concluída hoje' : 'Ainda pendente hoje';
   } else if(mission.recurrence.type==='days'){
-    if(done){ subtitle = 'Em dia neste período'+(periodLabel(mission) ? ' ('+periodLabel(mission)+')' : ''); }
+    var streakNow = state.gamification && state.gamification.completions[mission.id+'|'+vehicleId+'|'+nowKey] && state.gamification.completions[mission.id+'|'+vehicleId+'|'+nowKey].streak;
+    var streakTxt = (streakNow && streakNow>1) ? (' · 🔥 '+streakNow+'x seguidas') : '';
+    if(done){ subtitle = 'Em dia neste período'+(periodLabel(mission) ? ' ('+periodLabel(mission)+')' : '')+streakTxt; }
     else {
-      var daysLeft = (Number(nowKey)+1)*mission.recurrence.value - dayNumber(new Date().toISOString().slice(0,10));
-      subtitle = (daysLeft<=0 ? 'Vence hoje' : 'Vence em '+daysLeft+' dia(s)')+' · repete a cada '+mission.recurrence.value+' dias';
+      var endDate = periodEndDate(mission);
+      var daysLeft = endDate!=null ? (dayNumber(endDate) - dayNumber(new Date().toISOString().slice(0,10))) : null;
+      subtitle = (daysLeft==null ? '' : (daysLeft<=0 ? 'Vence hoje' : 'Vence em '+daysLeft+' dia(s)')+' · ')+'repete a cada '+mission.recurrence.value+' dias';
     }
   } else if(mission.recurrence.type==='km'){
     if(done){ subtitle = 'Em dia neste período'; }
@@ -672,7 +748,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev47'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev48'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
