@@ -453,10 +453,11 @@ const MISSIONS = [
     valueOf:function(rec){ return Number(rec.km||0); } }
 ];
 function dayNumber(dateStr){ return Math.floor(new Date(dateStr+'T00:00:00').getTime() / 86400000); }
-// chave da SEMANA de calendário (domingo a sábado) a que uma data pertence — usa a data do domingo como identificador
+// chave da SEMANA de calendário (segunda a domingo) a que uma data pertence — usa a data da segunda-feira como identificador
 function weekKeyFor(dateStr){
   var d = new Date(dateStr+'T00:00:00');
-  d.setDate(d.getDate() - d.getDay());
+  var offset = (d.getDay() + 6) % 7; // segunda=0, terça=1, ..., domingo=6 dias de distância da segunda-feira daquela semana
+  d.setDate(d.getDate() - offset);
   return d.toISOString().slice(0,10);
 }
 // chave do MÊS de calendário a que uma data pertence — 'YYYY-MM'
@@ -774,7 +775,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev50'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev51'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
