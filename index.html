@@ -19,7 +19,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, where, getDocs, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDBMOaAyRdrHoMc6pRm2B6ahwWJB5fmkPU",
@@ -45,6 +45,29 @@
       return getDoc(doc(fbDb, 'users', uid)).then(function(snap){
         return snap.exists() ? snap.data() : null;
       });
+    },
+    createShare: function(shareData){
+      var payload = Object.assign({}, shareData, { createdAt: serverTimestamp(), status: 'pending' });
+      return addDoc(collection(fbDb, 'shares'), payload);
+    },
+    fetchIncomingShares: function(email){
+      var q = query(collection(fbDb, 'shares'), where('toEmail', '==', email));
+      return getDocs(q).then(function(snap){
+        var out = [];
+        snap.forEach(function(d){ out.push(Object.assign({ id: d.id }, d.data())); });
+        return out;
+      });
+    },
+    fetchSentShares: function(email){
+      var q = query(collection(fbDb, 'shares'), where('fromEmail', '==', email));
+      return getDocs(q).then(function(snap){
+        var out = [];
+        snap.forEach(function(d){ out.push(Object.assign({ id: d.id }, d.data())); });
+        return out;
+      });
+    },
+    respondToShare: function(shareId, status){
+      return updateDoc(doc(fbDb, 'shares', shareId), { status: status, respondedAt: serverTimestamp() });
     }
   };
   window.dispatchEvent(new Event('fb-ready'));
@@ -163,6 +186,19 @@
   .card-side{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0; }
   .card-cost{ font-weight:700; font-size:14px; white-space:nowrap; }
   .card-del{ background:transparent; border:none; color:var(--dim); cursor:pointer; padding:2px; display:flex; }
+  .chat-thread{ display:flex; flex-direction:column; gap:10px; }
+  .chat-bubble{ max-width:82%; border-radius:14px; padding:10px 12px; background:var(--panel); border:1px solid var(--border); }
+  .chat-bubble.theirs{ align-self:flex-start; border-bottom-left-radius:4px; }
+  .chat-bubble.mine{ align-self:flex-end; background:var(--panel2); border-color:var(--border2); border-bottom-right-radius:4px; }
+  .chat-bubble-head{ display:flex; align-items:center; gap:6px; font-size:12.5px; }
+  .chat-bubble-sub{ font-size:11px; color:var(--dim); margin-top:2px; }
+  .chat-bubble-foot{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; font-size:10.5px; color:var(--dim); }
+  .chat-status{ font-weight:700; padding:1px 7px; border-radius:999px; }
+  .chat-status.pending{ color:var(--amber); background:rgba(232,163,61,.12); }
+  .chat-status.imported{ display:flex; align-items:center; gap:3px; color:var(--teal); background:rgba(61,112,104,.15); }
+  .chat-status.declined{ color:var(--red); background:rgba(193,80,63,.12); }
+  .chat-bubble-actions{ display:flex; gap:8px; margin-top:10px; }
+  .chat-badge{ background:var(--amber); color:var(--on-accent); font-size:10.5px; font-weight:800; min-width:18px; height:18px; border-radius:999px; display:flex; align-items:center; justify-content:center; padding:0 5px; }
   .card-del:hover{ color:var(--red); }
 
   /* ---------- gamificação ---------- */
@@ -775,7 +811,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev51'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev52'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -861,6 +897,8 @@ const ICONS = {
   route:'<polygon points="3 11 22 2 13 21 11 13 3 11"/>',
   award:'<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>',
   zap:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+  send:'<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
 };
 function icon(name, size, color, extra){
   size = size || 16; color = color || 'currentColor'; extra = extra || '';
@@ -892,6 +930,15 @@ let formPrefill = null; // holds entry data to re-populate a form after "Corrigi
 let lastGeoCoords = null; // { lat, lng } da localização usada pra preencher o campo de endereço automaticamente
 let lastGeoAddress = null; // o texto de endereço associado a lastGeoCoords — só usamos as coordenadas se o endereço não mudou
 let activeTrip = null; // percurso em andamento: { startTime, startCoords, startAddress, lastCoords, totalKm, watchId, tickTimer }
+let incomingShares = []; // itens recebidos de outros usuários (qualquer status)
+let sentShares = []; // itens que eu enviei (qualquer status)
+let sharesLoaded = false;
+let sharesLoading = false;
+let shareView = 'list'; // 'list' (lista de conversas) | 'thread' (conversa aberta)
+let shareRecordDraft = null; // { type, record, vehicleLabel } — o item sendo compartilhado no momento
+let shareComposeEmail = '';
+let shareComposeError = '';
+let activeConversationEmail = null; // e-mail da conversa aberta na visão 'thread'
 let pendingTripSummary = null; // percurso recém-finalizado, aguardando confirmação de atualizar o odômetro ou não
 let awaitingTripStartConfirm = false; // aguardando o usuário decidir se quer atualizar o odômetro antes de iniciar
 let tripError = ''; // mensagem de erro ao tentar iniciar um percurso (ex: permissão de localização negada)
@@ -1598,11 +1645,12 @@ function render(){
   html += renderTabs();
   html += renderTabTitle();
   html += '<div class="content">'+renderContent(stats, dashboardStats)+'</div>';
-  html += (state.tab !== 'dashboard' && state.tab !== 'missoes' && state.tab !== 'percurso' && state.activeVehicleId) ? renderFAB() : '';
+  html += (state.tab !== 'dashboard' && state.tab !== 'missoes' && state.tab !== 'percurso' && state.tab !== 'compartilhamento' && state.activeVehicleId) ? renderFAB() : '';
   html += (modal==='maintenance') ? renderMaintenanceForm() : '';
   html += (modal==='fuel') ? renderFuelForm() : '';
   html += (modal==='occurrence') ? renderOccurrenceForm() : '';
   html += (modal==='odometer') ? renderOdometerForm() : '';
+  html += (modal==='share-compose') ? renderShareComposeModal() : '';
   html += (modal==='vehicle') ? renderVehicleForm() : '';
   html += (modal==='vehicle-switch') ? renderVehicleSwitch() : '';
   html += (modal==='settings') ? renderSettingsModal() : '';
@@ -1716,6 +1764,7 @@ function renderTabs(){
     {key:'abastecimento', label:'Abastecimento', ic:'fuel', color:'var(--teal)'},
     {key:'ocorrencias', label:'Ocorrências', ic:'alert', color:'var(--red)'},
     {key:'percurso', label:'Percurso', ic:'route', color:'var(--teal)'},
+    {key:'compartilhamento', label:'Compartilhar', ic:'share', color:'var(--teal)'},
     {key:'missoes', label:'Missões', ic:'award', color:'var(--amber)'},
     {key:'dashboard', label:'Dashboard', ic:'dash', color:'var(--muted)'}
   ];
@@ -1728,7 +1777,7 @@ function renderTabs(){
   return html;
 }
 function renderTabTitle(){
-  var titles = { manutencao:'Manutenção', abastecimento:'Abastecimento', ocorrencias:'Ocorrências', percurso:'Percurso', missoes:'Missões', dashboard:'Dashboard' };
+  var titles = { manutencao:'Manutenção', abastecimento:'Abastecimento', ocorrencias:'Ocorrências', percurso:'Percurso', compartilhamento:'Compartilhar', missoes:'Missões', dashboard:'Dashboard' };
   return '<h2 class="tab-title">'+(titles[state.tab]||'')+'</h2>';
 }
 
@@ -1738,9 +1787,207 @@ function renderContent(stats, dashboardStats){
   if(state.tab==='ocorrencias') return renderOccurrenceList();
   if(state.tab==='missoes') return renderMissions();
   if(state.tab==='percurso') return renderPercursoTab();
+  if(state.tab==='compartilhamento') return renderShareTab();
   return renderFuelList();
 }
 
+/* ---------- compartilhamento de dados entre usuários (por registro individual, estilo chat) ---------- */
+function loadShares(){
+  if(!authUser || !authUser.email || !window.__fb) return;
+  sharesLoading = true;
+  render();
+  var email = authUser.email.toLowerCase();
+  Promise.all([window.__fb.fetchIncomingShares(email), window.__fb.fetchSentShares(email)])
+    .then(function(results){
+      incomingShares = results[0];
+      sentShares = results[1];
+      sharesLoading = false;
+      sharesLoaded = true;
+      render();
+    })
+    .catch(function(){ sharesLoading = false; sharesLoaded = true; render(); });
+}
+function findRecordById(type, id){
+  var list = type==='manutencao' ? state.maintenance
+    : type==='combustivel' ? state.fuel
+    : type==='ocorrencia' ? state.occurrences
+    : type==='percurso' ? (state.percursos||[])
+    : [];
+  return list.filter(function(r){ return r.id===id; })[0] || null;
+}
+var SHARE_TYPE_ICON = { manutencao:'wrench', combustivel:'fuel', ocorrencia:'alert', percurso:'route' };
+function shareRecordSummary(type, record){
+  if(!record) return 'Registro';
+  if(type==='manutencao') return (record.description||'Manutenção')+' · '+formatBRL(record.cost)+' · '+formatDate(record.date);
+  if(type==='combustivel') return (record.fuelType||'Combustível')+' · '+(record.liters?Number(record.liters).toLocaleString('pt-BR')+' L · ':'')+formatBRL(record.cost)+' · '+formatDate(record.date);
+  if(type==='ocorrencia') return (record.description||'Ocorrência')+' · '+formatDate(record.date);
+  if(type==='percurso') return formatKm(record.km)+' · '+formatDate(record.date);
+  return 'Registro';
+}
+function openShareCompose(type, id){
+  var record = findRecordById(type, id);
+  if(!record) return;
+  var vehicle = state.vehicles.filter(function(v){ return v.id===record.vehicleId; })[0];
+  shareRecordDraft = { type:type, id:id, record:record, vehicleLabel: vehicle ? getVehicleLabel(vehicle) : '' };
+  shareComposeEmail = '';
+  shareComposeError = '';
+  modal = 'share-compose';
+  render();
+}
+function submitShareRecord(){
+  shareComposeError = '';
+  var email = (shareComposeEmail||'').trim().toLowerCase();
+  if(!email || email.indexOf('@')===-1){ shareComposeError = 'Digite um e-mail válido.'; render(); return; }
+  if(authUser && authUser.email && email===authUser.email.toLowerCase()){ shareComposeError = 'Você não pode enviar pra si mesmo.'; render(); return; }
+  if(!shareRecordDraft){ return; }
+  window.__fb.createShare({
+    fromUid: authUser.uid, fromEmail: authUser.email.toLowerCase(), toEmail: email,
+    recordType: shareRecordDraft.type,
+    vehicleLabel: shareRecordDraft.vehicleLabel,
+    summary: shareRecordSummary(shareRecordDraft.type, shareRecordDraft.record),
+    record: shareRecordDraft.record
+  }).then(function(){
+    closeModal();
+    shareRecordDraft = null;
+    activeConversationEmail = email;
+    shareView = 'thread';
+    loadShares();
+  }).catch(function(){
+    shareComposeError = 'Não foi possível enviar agora. Verifique sua conexão e tente de novo.';
+    render();
+  });
+}
+function importSharedRecord(share){
+  if(!state.activeVehicleId){ return false; }
+  var vehicleId = state.activeVehicleId;
+  var rec = Object.assign({}, share.record, { id: uid(), vehicleId: vehicleId });
+  if(share.recordType==='manutencao') state.maintenance.push(rec);
+  else if(share.recordType==='combustivel') state.fuel.push(rec);
+  else if(share.recordType==='ocorrencia') state.occurrences.push(rec);
+  else if(share.recordType==='percurso'){ if(!state.percursos) state.percursos = []; state.percursos.push(rec); }
+  else return false;
+  backfillMissions();
+  return true;
+}
+function respondShare(shareId, accept){
+  var share = incomingShares.filter(function(s){ return s.id===shareId; })[0];
+  if(!share || !window.__fb) return;
+  var imported = false;
+  if(accept) imported = importSharedRecord(share);
+  window.__fb.respondToShare(shareId, accept ? (imported ? 'imported' : 'declined') : 'declined').then(function(){
+    loadShares();
+    if(imported) persist();
+  });
+}
+function conversationCounterpart(share, myEmail){
+  return (share.fromEmail===myEmail) ? share.toEmail : share.fromEmail;
+}
+function buildConversations(){
+  if(!authUser || !authUser.email) return [];
+  var myEmail = authUser.email.toLowerCase();
+  var all = incomingShares.concat(sentShares);
+  var byEmail = {};
+  all.forEach(function(s){
+    var other = conversationCounterpart(s, myEmail);
+    if(!byEmail[other]) byEmail[other] = [];
+    byEmail[other].push(s);
+  });
+  var conversations = Object.keys(byEmail).map(function(email){
+    var items = byEmail[email].slice().sort(function(a,b){
+      var ta = (a.createdAt && a.createdAt.seconds) || 0;
+      var tb = (b.createdAt && b.createdAt.seconds) || 0;
+      return ta - tb;
+    });
+    var last = items[items.length-1];
+    var pendingCount = items.filter(function(s){ return s.toEmail===myEmail && s.status==='pending'; }).length;
+    return { email:email, items:items, last:last, pendingCount:pendingCount };
+  });
+  conversations.sort(function(a,b){
+    var ta = (a.last.createdAt && a.last.createdAt.seconds) || 0;
+    var tb = (b.last.createdAt && b.last.createdAt.seconds) || 0;
+    return tb - ta;
+  });
+  return conversations;
+}
+function shareTimeLabel(share){
+  if(!share.createdAt || !share.createdAt.seconds) return '';
+  var d = new Date(share.createdAt.seconds*1000);
+  return formatDate(d.toISOString().slice(0,10));
+}
+function renderShareComposeModal(){
+  if(!shareRecordDraft) return '';
+  return '<div class="overlay" data-action="close-modal-bg">' +
+    '<div class="sheet" onclick="event.stopPropagation()">' +
+      '<div class="sheet-head"><h2>Compartilhar</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
+      '<div class="card" style="padding:12px; margin-bottom:14px;">' +
+        '<div class="card-title">'+icon(SHARE_TYPE_ICON[shareRecordDraft.type]||'share',13,'var(--teal)')+' '+esc(shareRecordSummary(shareRecordDraft.type, shareRecordDraft.record))+'</div>' +
+        (shareRecordDraft.vehicleLabel ? '<div class="card-meta"><span>'+esc(shareRecordDraft.vehicleLabel)+'</span></div>' : '') +
+      '</div>' +
+      fieldHtml('E-mail de quem vai receber', '<input id="f-share-compose-email" type="email" value="'+esc(shareComposeEmail)+'" placeholder="nome@exemplo.com">') +
+      (shareComposeError ? '<p style="color:var(--red); font-size:12px; margin:-6px 0 12px;">'+esc(shareComposeError)+'</p>' : '') +
+      '<button class="btn-primary" style="width:100%; justify-content:center;" data-action="submit-share-record">Enviar</button>' +
+    '</div>' +
+  '</div>';
+}
+function renderShareTab(){
+  if(!authUser){ return '<div class="empty"><p class="empty-sub">Entre com sua conta pra usar o compartilhamento.</p></div>'; }
+  if(sharesLoading && !sharesLoaded){
+    return '<div class="empty"><p class="empty-sub">Carregando…</p></div>';
+  }
+  var myEmail = authUser.email.toLowerCase();
+  var conversations = buildConversations();
+
+  if(shareView==='thread' && activeConversationEmail){
+    var convo = conversations.filter(function(c){ return c.email===activeConversationEmail; })[0];
+    var html = '<button class="btn-ghost" style="margin-bottom:14px;" data-action="back-to-share-list">'+icon('chevron',14)+' Voltar</button>';
+    html += '<div class="chat-thread">';
+    if(convo){
+      convo.items.forEach(function(s){
+        var mine = s.fromEmail===myEmail;
+        var st = s.status;
+        html += '<div class="chat-bubble '+(mine?'mine':'theirs')+'">' +
+          '<div class="chat-bubble-head">'+icon(SHARE_TYPE_ICON[s.recordType]||'share',12,mine?'var(--on-accent)':'var(--teal)')+' <strong>'+esc(s.summary||'Registro')+'</strong></div>' +
+          (s.vehicleLabel ? '<div class="chat-bubble-sub">'+esc(s.vehicleLabel)+'</div>' : '') +
+          '<div class="chat-bubble-foot">' +
+            '<span>'+shareTimeLabel(s)+'</span>' +
+            (st==='pending' ? '<span class="chat-status pending">Pendente</span>' : st==='imported' ? '<span class="chat-status imported">'+icon('check',10)+' Importado</span>' : '<span class="chat-status declined">Recusado</span>') +
+          '</div>' +
+          (!mine && st==='pending' ? '<div class="chat-bubble-actions">' +
+            '<button class="btn-primary" style="flex:1; justify-content:center; padding:7px;" data-action="accept-share" data-id="'+s.id+'">Importar</button>' +
+            '<button class="btn-ghost" style="flex:1; justify-content:center; padding:7px;" data-action="decline-share" data-id="'+s.id+'">Recusar</button>' +
+          '</div>' : '') +
+        '</div>';
+      });
+    }
+    html += '</div>';
+    return html;
+  }
+
+  var html = '';
+  if(!conversations.length){
+    html += '<div class="empty">' +
+      '<div class="empty-icon">'+icon('share',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhuma conversa ainda</p>' +
+      '<p class="empty-sub">Toque no ícone de compartilhar em qualquer registro de manutenção, abastecimento, ocorrência ou percurso pra enviar pra alguém.</p>' +
+    '</div>';
+    return html;
+  }
+  html += '<div class="list">';
+  conversations.forEach(function(c){
+    html += '<div class="card" data-action="open-conversation" data-email="'+esc(c.email)+'" style="cursor:pointer;">' +
+      '<div class="card-main">' +
+        '<div class="card-title">'+esc(c.email)+'</div>' +
+        '<div class="card-meta"><span>'+esc(c.last.summary||'')+'</span></div>' +
+      '</div>' +
+      '<div class="card-side">' +
+        (c.pendingCount ? '<span class="chat-badge">'+c.pendingCount+'</span>' : '') +
+        icon('chevron',16,'var(--dim)') +
+      '</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  return html;
+}
 function renderPercursoTab(){
   if(!state.activeVehicleId){
     return '<div class="empty">' +
@@ -1797,6 +2044,7 @@ function renderPercursoTab(){
           '<div class="card-meta"><span>'+icon('mappin',11,'var(--red)')+' '+esc(p.endAddress)+'</span></div>' +
         '</div>' +
         '<div class="card-side">' +
+          '<button class="card-del" data-action="open-share-compose" data-type="percurso" data-id="'+p.id+'" style="color:var(--teal)">'+icon('share',13)+'</button>' +
           '<button class="card-del" data-action="del-percurso" data-id="'+p.id+'">'+icon('x',15)+'</button>' +
         '</div>' +
       '</div>';
@@ -1996,6 +2244,7 @@ function renderMaintenanceList(){
       '</div>' +
       '<div class="card-side">' +
         '<span class="card-cost" style="color:var(--amber)">'+formatBRL(m.cost)+'</span>' +
+        '<button class="card-del" data-action="open-share-compose" data-type="manutencao" data-id="'+m.id+'" style="color:var(--teal)">'+icon('share',13)+'</button>' +
         '<button class="card-del" data-action="edit-maintenance" data-id="'+m.id+'" style="color:var(--muted)">'+icon('wrench',14)+'</button>' +
         '<button class="card-del" data-action="del-maintenance" data-id="'+m.id+'">'+icon('x',15)+'</button>' +
       '</div>' +
@@ -2035,6 +2284,7 @@ function renderOccurrenceList(){
       '</div>' +
       '<div class="card-side">' +
         (o.cost ? '<span class="card-cost" style="color:var(--red)">'+formatBRL(o.cost)+'</span>' : '') +
+        '<button class="card-del" data-action="open-share-compose" data-type="ocorrencia" data-id="'+o.id+'" style="color:var(--teal)">'+icon('share',13)+'</button>' +
         '<button class="card-del" data-action="edit-occurrence" data-id="'+o.id+'" style="color:var(--muted)">'+icon('wrench',14)+'</button>' +
         '<button class="card-del" data-action="del-occurrence" data-id="'+o.id+'">'+icon('x',15)+'</button>' +
       '</div>' +
@@ -2075,6 +2325,7 @@ function renderFuelList(){
       '</div>' +
       '<div class="card-side">' +
         '<span class="card-cost" style="color:var(--teal)">'+formatBRL(f.cost)+'</span>' +
+        '<button class="card-del" data-action="open-share-compose" data-type="combustivel" data-id="'+f.id+'" style="color:var(--teal)">'+icon('share',13)+'</button>' +
         '<button class="card-del" data-action="edit-fuel" data-id="'+f.id+'" style="color:var(--muted)">'+icon('wrench',14)+'</button>' +
         '<button class="card-del" data-action="del-fuel" data-id="'+f.id+'">'+icon('x',15)+'</button>' +
       '</div>' +
@@ -2699,10 +2950,30 @@ function attachEvents(){
         if(removedTrip) revokeMissionsForRecord(removedTrip, 'percurso');
         persist();
       }
+      else if(action==='open-share-compose'){
+        openShareCompose(el.getAttribute('data-type'), el.getAttribute('data-id'));
+      }
+      else if(action==='submit-share-record'){
+        shareComposeEmail = document.getElementById('f-share-compose-email').value;
+        submitShareRecord();
+      }
+      else if(action==='accept-share'){ respondShare(el.getAttribute('data-id'), true); }
+      else if(action==='decline-share'){ respondShare(el.getAttribute('data-id'), false); }
+      else if(action==='open-conversation'){
+        activeConversationEmail = el.getAttribute('data-email');
+        shareView = 'thread';
+        render();
+      }
+      else if(action==='back-to-share-list'){
+        shareView = 'list';
+        activeConversationEmail = null;
+        render();
+      }
       else if(action==='set-tab'){
         var newTab = el.getAttribute('data-tab');
         state.tab = newTab;
         if(state.tab==='dashboard') evaluateNavigationMissions(state.activeVehicleId);
+        if(state.tab==='compartilhamento' && !sharesLoading) loadShares();
         render();
       }
       else if(action==='open-form'){
