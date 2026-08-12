@@ -812,7 +812,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev53'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev54'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -940,10 +940,14 @@ let sharesLoading = false;
 let shareView = 'list'; // 'list' (lista de conversas) | 'thread' (conversa aberta)
 let shareRecordDraft = null; // { type, record, vehicleLabel } — o registro sendo anexado a um envio no momento
 let shareComposeEmail = '';
-let shareComposeName = '';
 let shareComposeError = '';
+let shareComposeAddingFriend = false; // formulário inline de "adicionar amigo" dentro da caixa de compartilhar
 let activeConversationEmail = null; // e-mail da conversa aberta na visão 'thread'
 let newConversationPromptOpen = false; // tela de "iniciar nova conversa" (só pede o e-mail)
+let friendFormEmail = ''; // e-mail no formulário de amigo (adicionar/editar)
+let friendFormName = ''; // nome no formulário de amigo (adicionar/editar)
+let friendFormError = '';
+let friendEditingEmail = null; // null = adicionando novo amigo; string = editando o amigo com esse e-mail
 let pendingTripSummary = null; // percurso recém-finalizado, aguardando confirmação de atualizar o odômetro ou não
 let awaitingTripStartConfirm = false; // aguardando o usuário decidir se quer atualizar o odômetro antes de iniciar
 let tripError = ''; // mensagem de erro ao tentar iniciar um percurso (ex: permissão de localização negada)
@@ -1657,6 +1661,7 @@ function render(){
   html += (modal==='occurrence') ? renderOccurrenceForm() : '';
   html += (modal==='odometer') ? renderOdometerForm() : '';
   html += (modal==='share-compose') ? renderShareComposeModal() : '';
+  html += (modal==='friends') ? renderFriendsModal() : '';
   html += (modal==='vehicle') ? renderVehicleForm() : '';
   html += (modal==='vehicle-switch') ? renderVehicleSwitch() : '';
   html += (modal==='settings') ? renderSettingsModal() : '';
@@ -1826,27 +1831,80 @@ function getContactName(email){
   if(!email) return '';
   return (state.contacts && state.contacts[email.toLowerCase()]) || '';
 }
-function saveContactName(email, name){
-  email = (email||'').trim().toLowerCase();
-  name = (name||'').trim();
-  if(!email || !name) return;
-  if(!state.contacts) state.contacts = {};
-  if(state.contacts[email] !== name){
-    state.contacts[email] = name;
-    persist();
-  }
-}
 function contactDisplayName(email){
   return getContactName(email) || email;
 }
-function buildContactOptionsHtml(){
+function buildContactOptionsHtml(selectedEmail){
   var emails = Object.keys(state.contacts||{}).sort(function(a,b){
     return (state.contacts[a]||'').localeCompare(state.contacts[b]||'');
   });
-  if(!emails.length) return '';
-  return '<option value="">Selecionar contato salvo…</option>' + emails.map(function(email){
-    return '<option value="'+esc(email)+'">'+esc(state.contacts[email])+' ('+esc(email)+')</option>';
+  return emails.map(function(email){
+    return '<option value="'+esc(email)+'" '+(email===selectedEmail?'selected':'')+'>'+esc(state.contacts[email])+' ('+esc(email)+')</option>';
   }).join('');
+}
+function hasFriends(){ return Object.keys(state.contacts||{}).length > 0; }
+function openFriendsModal(){
+  friendFormEmail = '';
+  friendFormName = '';
+  friendFormError = '';
+  friendEditingEmail = null;
+  modal = 'friends';
+  render();
+}
+function startEditFriend(email){
+  friendEditingEmail = email;
+  friendFormEmail = email;
+  friendFormName = getContactName(email);
+  friendFormError = '';
+  render();
+}
+function cancelFriendForm(){
+  friendFormEmail = '';
+  friendFormName = '';
+  friendFormError = '';
+  friendEditingEmail = null;
+  render();
+}
+function saveFriendForm(){
+  var email = (friendFormEmail||'').trim().toLowerCase();
+  var name = (friendFormName||'').trim();
+  friendFormError = '';
+  if(!email || email.indexOf('@')===-1){ friendFormError = 'Digite um e-mail válido.'; render(); return; }
+  if(!name){ friendFormError = 'Digite um nome.'; render(); return; }
+  if(authUser && authUser.email && email===authUser.email.toLowerCase()){ friendFormError = 'Você não pode se adicionar como amigo.'; render(); return; }
+  if(!state.contacts) state.contacts = {};
+  if(friendEditingEmail && friendEditingEmail !== email){ delete state.contacts[friendEditingEmail]; }
+  state.contacts[email] = name;
+  persist();
+  if(shareComposeAddingFriend){
+    shareComposeAddingFriend = false;
+    shareComposeEmail = email;
+  }
+  friendFormEmail = '';
+  friendFormName = '';
+  friendFormError = '';
+  friendEditingEmail = null;
+  render();
+}
+function deleteFriend(email){
+  if(!state.contacts) return;
+  delete state.contacts[email];
+  if(shareComposeEmail===email) shareComposeEmail = '';
+  persist();
+  render();
+}
+function openAddFriendInline(){
+  friendFormEmail = '';
+  friendFormName = '';
+  friendFormError = '';
+  friendEditingEmail = null;
+  shareComposeAddingFriend = true;
+  render();
+}
+function cancelAddFriendInline(){
+  shareComposeAddingFriend = false;
+  friendFormError = '';
+  render();
 }
 function shareRecordSummary(type, record){
   if(!record) return 'Registro';
@@ -1867,17 +1925,16 @@ function openShareCompose(type, id){
   if(!record) return;
   var vehicle = state.vehicles.filter(function(v){ return v.id===record.vehicleId; })[0];
   shareRecordDraft = { type:type, id:id, record:record, vehicleLabel: vehicle ? getVehicleLabel(vehicle) : '' };
-  shareComposeEmail = activeConversationEmail || '';
-  shareComposeName = getContactName(shareComposeEmail);
+  shareComposeEmail = (activeConversationEmail && getContactName(activeConversationEmail)) ? activeConversationEmail : '';
   shareComposeError = '';
+  shareComposeAddingFriend = !hasFriends();
   modal = 'share-compose';
   render();
 }
 function submitShareRecord(){
   shareComposeError = '';
   var email = (shareComposeEmail||'').trim().toLowerCase();
-  var name = (shareComposeName||'').trim();
-  if(!email || email.indexOf('@')===-1){ shareComposeError = 'Digite um e-mail válido.'; render(); return; }
+  if(!email || !getContactName(email)){ shareComposeError = 'Selecione um amigo salvo.'; render(); return; }
   if(authUser && authUser.email && email===authUser.email.toLowerCase()){ shareComposeError = 'Você não pode enviar pra si mesmo.'; render(); return; }
   if(!shareRecordDraft){ return; }
   window.__fb.createShare({
@@ -1888,7 +1945,6 @@ function submitShareRecord(){
     summary: shareRecordSummary(shareRecordDraft.type, shareRecordDraft.record),
     record: shareRecordDraft.record
   }).then(function(){
-    if(name) saveContactName(email, name);
     closeModal();
     shareRecordDraft = null;
     activeConversationEmail = email;
@@ -1911,13 +1967,18 @@ function sendChatMessage(){
     text: text
   }).then(function(){ loadShares(); }).catch(function(){ /* falha silenciosa — usuário pode tentar de novo */ });
 }
-function openNewConversationPrompt(){ newConversationPromptOpen = true; shareComposeEmail=''; shareComposeName=''; shareComposeError=''; modal = 'share-compose'; render(); }
+function openNewConversationPrompt(){
+  newConversationPromptOpen = true;
+  shareComposeEmail = '';
+  shareComposeError = '';
+  shareComposeAddingFriend = !hasFriends();
+  modal = 'share-compose';
+  render();
+}
 function confirmNewConversation(){
   var email = (shareComposeEmail||'').trim().toLowerCase();
-  var name = (shareComposeName||'').trim();
-  if(!email || email.indexOf('@')===-1){ shareComposeError = 'Digite um e-mail válido.'; render(); return; }
+  if(!email || !getContactName(email)){ shareComposeError = 'Selecione um amigo salvo.'; render(); return; }
   if(authUser && authUser.email && email===authUser.email.toLowerCase()){ shareComposeError = 'Você não pode iniciar uma conversa consigo mesmo.'; render(); return; }
-  if(name) saveContactName(email, name);
   newConversationPromptOpen = false;
   modal = null;
   activeConversationEmail = email;
@@ -1962,21 +2023,68 @@ function conversationPreview(share){
   if(!share) return '';
   return share.kind==='message' ? share.text : (share.summary||'Registro compartilhado');
 }
-function renderShareContactPickerHtml(){
-  var options = buildContactOptionsHtml();
-  if(!options) return '';
-  return fieldHtml('Contato salvo', '<select id="f-share-compose-contact">'+options+'</select>');
+function renderFriendFormFieldsHtml(){
+  return fieldHtml('E-mail do amigo', '<input id="f-friend-email" type="email" value="'+esc(friendFormEmail)+'" placeholder="nome@exemplo.com">') +
+    fieldHtml('Nome do amigo', '<input id="f-friend-name" type="text" value="'+esc(friendFormName)+'" placeholder="Como você quer chamar essa pessoa">') +
+    (friendFormError ? '<p style="color:var(--red); font-size:12px; margin:-6px 0 12px;">'+esc(friendFormError)+'</p>' : '');
+}
+function renderFriendsModal(){
+  var emails = Object.keys(state.contacts||{}).sort(function(a,b){
+    return (state.contacts[a]||'').localeCompare(state.contacts[b]||'');
+  });
+  var listHtml = '';
+  if(emails.length){
+    listHtml += '<div class="list" style="margin-top:16px;">';
+    emails.forEach(function(email){
+      listHtml += '<div class="card">' +
+        '<div class="card-main">' +
+          '<div class="card-title">'+esc(state.contacts[email])+'</div>' +
+          '<div class="card-meta"><span>'+esc(email)+'</span></div>' +
+        '</div>' +
+        '<div class="card-side" style="flex-direction:row; gap:10px;">' +
+          '<button class="card-del" data-action="edit-friend" data-email="'+esc(email)+'" aria-label="Editar">'+icon('edit',15)+'</button>' +
+          '<button class="card-del" data-action="delete-friend" data-email="'+esc(email)+'" aria-label="Remover">'+icon('x',15)+'</button>' +
+        '</div>' +
+      '</div>';
+    });
+    listHtml += '</div>';
+  } else {
+    listHtml += '<p class="empty-sub" style="margin-top:16px;">Nenhum amigo salvo ainda.</p>';
+  }
+  return '<div class="overlay" data-action="close-modal-bg">' +
+    '<div class="sheet" onclick="event.stopPropagation()">' +
+      '<div class="sheet-head"><h2>'+(friendEditingEmail?'Editar amigo':'Adicionar amigo')+'</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
+      renderFriendFormFieldsHtml() +
+      (friendEditingEmail ? '<div style="display:flex; gap:8px;">' +
+        '<button class="btn-ghost" style="flex:1; justify-content:center;" data-action="cancel-friend-edit">Cancelar</button>' +
+        '<button class="btn-primary" style="flex:1; justify-content:center;" data-action="save-friend">Salvar alterações</button>' +
+      '</div>' : '<button class="btn-primary" style="width:100%; justify-content:center;" data-action="save-friend">Salvar amigo</button>') +
+      listHtml +
+    '</div>' +
+  '</div>';
+}
+function renderShareFriendPickerHtml(){
+  if(shareComposeAddingFriend){
+    return renderFriendFormFieldsHtml() +
+      '<div style="display:flex; gap:8px; margin-bottom:14px;">' +
+        (hasFriends() ? '<button class="btn-ghost" style="flex:1; justify-content:center;" data-action="cancel-add-friend-inline">Cancelar</button>' : '') +
+        '<button class="btn-primary" style="flex:1; justify-content:center;" data-action="save-friend">Salvar amigo</button>' +
+      '</div>';
+  }
+  if(!hasFriends()){
+    return '<p class="empty-sub" style="margin:0 0 14px;">Nenhum amigo salvo ainda. Adicione um amigo pra poder compartilhar.</p>';
+  }
+  return fieldHtml('Selecionar amigo', '<select id="f-share-compose-email"><option value="">Escolha um amigo…</option>'+buildContactOptionsHtml(shareComposeEmail)+'</select>') +
+    '<button class="btn-ghost" style="margin:-8px 0 14px; padding:6px 10px; font-size:12px;" data-action="open-add-friend-inline">'+icon('plus',13)+' Adicionar amigo</button>';
 }
 function renderShareComposeModal(){
   if(newConversationPromptOpen){
     return '<div class="overlay" data-action="close-modal-bg">' +
       '<div class="sheet" onclick="event.stopPropagation()">' +
         '<div class="sheet-head"><h2>Nova conversa</h2><button class="sheet-close" data-action="cancel-new-conversation">'+icon('x',20)+'</button></div>' +
-        renderShareContactPickerHtml() +
-        fieldHtml('E-mail da pessoa', '<input id="f-share-compose-email" type="email" value="'+esc(shareComposeEmail)+'" placeholder="nome@exemplo.com">') +
-        fieldHtml('Nome da pessoa', '<input id="f-share-compose-name" type="text" value="'+esc(shareComposeName)+'" placeholder="Como você quer chamar essa pessoa">') +
+        renderShareFriendPickerHtml() +
         (shareComposeError ? '<p style="color:var(--red); font-size:12px; margin:-6px 0 12px;">'+esc(shareComposeError)+'</p>' : '') +
-        '<button class="btn-primary" style="width:100%; justify-content:center;" data-action="confirm-new-conversation">Iniciar conversa</button>' +
+        (shareComposeAddingFriend ? '' : '<button class="btn-primary" style="width:100%; justify-content:center;" data-action="confirm-new-conversation">Iniciar conversa</button>') +
       '</div>' +
     '</div>';
   }
@@ -1988,12 +2096,12 @@ function renderShareComposeModal(){
         '<div class="card-title">'+icon(SHARE_TYPE_ICON[shareRecordDraft.type]||'share',13,'var(--teal)')+' '+esc(shareRecordSummary(shareRecordDraft.type, shareRecordDraft.record))+'</div>' +
         (shareRecordDraft.vehicleLabel ? '<div class="card-meta"><span>'+esc(shareRecordDraft.vehicleLabel)+'</span></div>' : '') +
       '</div>' +
-      renderShareContactPickerHtml() +
-      fieldHtml('E-mail de quem vai receber', '<input id="f-share-compose-email" type="email" value="'+esc(shareComposeEmail)+'" placeholder="nome@exemplo.com">') +
-      fieldHtml('Nome de quem vai receber', '<input id="f-share-compose-name" type="text" value="'+esc(shareComposeName)+'" placeholder="Como você quer chamar essa pessoa">') +
+      renderShareFriendPickerHtml() +
       (shareComposeError ? '<p style="color:var(--red); font-size:12px; margin:-6px 0 12px;">'+esc(shareComposeError)+'</p>' : '') +
-      '<p class="tank-hint" style="margin-top:-8px;">O registro fica disponível só pra consulta — não é adicionado aos dados de quem recebe.</p>' +
-      '<button class="btn-primary" style="width:100%; justify-content:center;" data-action="submit-share-record">Enviar</button>' +
+      (shareComposeAddingFriend ? '' :
+        '<p class="tank-hint" style="margin-top:-8px;">O registro fica disponível só pra consulta — não é adicionado aos dados de quem recebe.</p>' +
+        '<button class="btn-primary" style="width:100%; justify-content:center;" data-action="submit-share-record">Enviar</button>'
+      ) +
     '</div>' +
   '</div>';
 }
@@ -2036,7 +2144,10 @@ function renderShareTab(){
     return html;
   }
 
-  var html = '<button class="btn-ghost" style="width:100%; justify-content:center; margin-bottom:16px;" data-action="open-new-conversation">'+icon('chat',14)+' Nova conversa</button>';
+  var html = '<div style="display:flex; gap:8px; margin-bottom:16px;">' +
+    '<button class="btn-ghost" style="flex:1; justify-content:center;" data-action="open-new-conversation">'+icon('chat',14)+' Nova conversa</button>' +
+    '<button class="btn-ghost" style="flex:1; justify-content:center;" data-action="open-friends-modal">'+icon('plus',14)+' Adicionar amigo</button>' +
+  '</div>';
   if(!conversations.length){
     html += '<div class="empty">' +
       '<div class="empty-icon">'+icon('chat',22,'var(--dim2)')+'</div>' +
@@ -3025,23 +3136,35 @@ function attachEvents(){
         openShareCompose(el.getAttribute('data-type'), el.getAttribute('data-id'));
       }
       else if(action==='submit-share-record'){
-        shareComposeEmail = document.getElementById('f-share-compose-email').value;
-        var nameElSubmit = document.getElementById('f-share-compose-name');
-        shareComposeName = nameElSubmit ? nameElSubmit.value : '';
+        var emailSelSubmit = document.getElementById('f-share-compose-email');
+        shareComposeEmail = emailSelSubmit ? emailSelSubmit.value : shareComposeEmail;
         submitShareRecord();
       }
       else if(action==='open-new-conversation'){ openNewConversationPrompt(); }
       else if(action==='confirm-new-conversation'){
-        shareComposeEmail = document.getElementById('f-share-compose-email').value;
-        var nameElConfirm = document.getElementById('f-share-compose-name');
-        shareComposeName = nameElConfirm ? nameElConfirm.value : '';
+        var emailSelConfirm = document.getElementById('f-share-compose-email');
+        shareComposeEmail = emailSelConfirm ? emailSelConfirm.value : shareComposeEmail;
         confirmNewConversation();
       }
       else if(action==='cancel-new-conversation'){
         newConversationPromptOpen = false;
+        shareComposeAddingFriend = false;
         modal = null;
         render();
       }
+      else if(action==='open-friends-modal'){ openFriendsModal(); }
+      else if(action==='edit-friend'){ startEditFriend(el.getAttribute('data-email')); }
+      else if(action==='cancel-friend-edit'){ cancelFriendForm(); }
+      else if(action==='delete-friend'){ deleteFriend(el.getAttribute('data-email')); }
+      else if(action==='save-friend'){
+        var friendEmailEl = document.getElementById('f-friend-email');
+        var friendNameEl = document.getElementById('f-friend-name');
+        friendFormEmail = friendEmailEl ? friendEmailEl.value : friendFormEmail;
+        friendFormName = friendNameEl ? friendNameEl.value : friendFormName;
+        saveFriendForm();
+      }
+      else if(action==='open-add-friend-inline'){ openAddFriendInline(); }
+      else if(action==='cancel-add-friend-inline'){ cancelAddFriendInline(); }
       else if(action==='send-chat-message'){ sendChatMessage(); }
       else if(action==='open-conversation'){
         activeConversationEmail = el.getAttribute('data-email');
