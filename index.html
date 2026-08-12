@@ -812,7 +812,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev54'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev55'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1648,6 +1648,7 @@ function render(){
   var app = document.getElementById('app');
   if(!authChecked){ app.innerHTML = renderAuthSplash(); return; }
   if(!authUser){ app.innerHTML = renderLoginScreen(); attachEvents(); return; }
+  if(appMode==='simplificado' && SIMPLIFIED_TABS.indexOf(state.tab)===-1){ state.tab = SIMPLIFIED_TABS[0]; }
   var stats = computeStats();
   var dashboardStats = state.tab==='dashboard' ? computeStatsForVehicle(state.activeVehicleId, dashFilterStart, dashFilterEnd) : null;
   var html = '';
@@ -1770,7 +1771,7 @@ function renderHeader(stats){
 }
 
 function renderTabs(){
-  var tabs = [
+  var allTabs = [
     {key:'manutencao', label:'Manutenção', ic:'wrench', color:'var(--amber)'},
     {key:'abastecimento', label:'Abastecimento', ic:'fuel', color:'var(--teal)'},
     {key:'ocorrencias', label:'Ocorrências', ic:'alert', color:'var(--red)'},
@@ -1779,6 +1780,9 @@ function renderTabs(){
     {key:'missoes', label:'Missões', ic:'award', color:'var(--amber)'},
     {key:'dashboard', label:'Dashboard', ic:'dash', color:'var(--muted)'}
   ];
+  var tabs = (appMode==='simplificado')
+    ? allTabs.filter(function(t){ return SIMPLIFIED_TABS.indexOf(t.key)!==-1; })
+    : allTabs;
   var html = '<div class="tabs">';
   tabs.forEach(function(t){
     html += '<button class="tab-btn '+(state.tab===t.key?'active':'')+'" data-action="set-tab" data-tab="'+t.key+'" aria-label="'+esc(t.label)+'">'+
@@ -2653,6 +2657,7 @@ function odoFieldHtml(value){
 }
 
 function addressFieldHtml(value, label, category){
+  if(appMode==='simplificado') return simplifiedLocationFieldHtml(value, category);
   label = label || 'Endereço';
   var saved = ((state.locations && state.locations[category]) || []).slice().sort(function(a,b){
     return (a.name||'').localeCompare(b.name||'', 'pt-BR');
@@ -2677,6 +2682,30 @@ function addressFieldHtml(value, label, category){
     '<div id="f-location-name-wrap" style="display:'+(showNameField?'block':'none')+'; margin-top:10px;">' +
       '<span class="field-label" style="font-size:12px;">Como quer chamar este local? <span style="opacity:.65; font-weight:400;">(fica salvo pra próxima vez)</span></span>' +
       '<input id="f-location-name" placeholder="Ex: Oficina do João">' +
+    '</div>' +
+  '</div>';
+}
+
+// Versão simplificada do campo de local: sem endereço, sem mapa, sem geolocalização —
+// só um nome de local escolhido numa lista salva, ou digitado na primeira vez.
+function simplifiedLocationFieldHtml(value, category){
+  var saved = ((state.locations && state.locations[category]) || []).slice().sort(function(a,b){
+    return (a.name||'').localeCompare(b.name||'', 'pt-BR');
+  });
+  var matched = value ? findLocationByAddress(category, value) : null;
+  var selectHtml = '';
+  if(saved.length){
+    var options = '<option value="">+ Novo local</option>' + saved.map(function(l){
+      return '<option value="'+esc(l.id)+'"'+(matched && matched.id===l.id ? ' selected':'')+'>'+esc(l.name)+'</option>';
+    }).join('');
+    selectHtml = '<select id="f-location-select" data-category="'+esc(category)+'" style="margin-bottom:8px;">'+options+'</select>';
+  }
+  var showInput = !saved.length || !matched;
+  return '<div class="field">' +
+    '<span class="field-label">Nome do local</span>' +
+    selectHtml +
+    '<div id="f-location-name-wrap" style="display:'+(showInput?'block':'none')+'">' +
+      '<input id="f-address" data-category="'+esc(category)+'" value="'+esc(value||'')+'" placeholder="Ex: Posto Ipiranga da Marginal">' +
     '</div>' +
   '</div>';
 }
@@ -2905,7 +2934,22 @@ function renderSettingsModal(){
   var html = '<div class="overlay" data-action="close-modal-bg">' +
     '<div class="sheet" onclick="event.stopPropagation()">' +
       '<div class="sheet-head"><h2>Configurações</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
-      '<span class="field-label" style="display:block; margin-bottom:10px;">Aparência do aplicativo</span>';
+      '<span class="field-label" style="display:block; margin-bottom:10px;">Versão do aplicativo</span>';
+  var appModeOptions = [
+    {key:'completo', name:'Completo', desc:'Todas as abas, com endereço completo e busca no mapa.'},
+    {key:'simplificado', name:'Simplificado', desc:'Manutenção, Abastecimento, Conversa, Missões e Dashboard. O local é só um nome.'}
+  ];
+  appModeOptions.forEach(function(m){
+    var isActive = m.key === appMode;
+    html += '<div class="theme-row '+(isActive?'active':'')+'" data-action="select-appmode" data-appmode="'+m.key+'">' +
+      '<div style="flex:1; min-width:0;">' +
+        '<span class="theme-name" style="display:block;">'+m.name+'</span>' +
+        '<span style="font-size:11px; color:var(--muted);">'+m.desc+'</span>' +
+      '</div>' +
+      (isActive ? '<span class="theme-check">'+icon('check',18)+'</span>' : '') +
+    '</div>';
+  });
+  html += '<span class="field-label" style="display:block; margin:22px 0 10px;">Aparência do aplicativo</span>';
   Object.keys(THEMES).forEach(function(key){
     var t = THEMES[key];
     var isActive = key === currentTheme;
@@ -3197,6 +3241,7 @@ function attachEvents(){
       else if(action==='open-vehicle-switch'){ openModal('vehicle-switch'); }
       else if(action==='open-settings'){ openModal('settings'); }
       else if(action==='select-theme'){ applyTheme(el.getAttribute('data-theme')); }
+      else if(action==='select-appmode'){ applyAppMode(el.getAttribute('data-appmode')); }
       else if(action==='add-vehicle'){ editingVehicleId = null; vehiclePhotoDraft = null; openModal('vehicle'); }
       else if(action==='edit-vehicle'){
         e.stopPropagation();
@@ -3528,15 +3573,17 @@ function attachEvents(){
         if(locSelect.value){
           var loc = findLocationById(locCategory, locSelect.value);
           if(loc) addressEl.value = loc.address;
+          refreshNameVisibility();
         } else {
           addressEl.value = '';
+          refreshNameVisibility();
           addressEl.focus();
         }
-        refreshNameVisibility();
       });
     }
     // carrega a localização atual automaticamente, só quando o campo ainda está vazio (lançamento novo)
-    if(!addressEl.value && navigator.geolocation){
+    // — recurso exclusivo do modo Completo; no modo Simplificado não há endereço/GPS envolvido
+    if(appMode==='completo' && !addressEl.value && navigator.geolocation){
       navigator.geolocation.getCurrentPosition(function(pos){
         var lat = pos.coords.latitude, lng = pos.coords.longitude;
         if(addressEl.value) return; // o usuário já digitou algo enquanto a localização carregava
@@ -3657,6 +3704,21 @@ function attachEvents(){
 }
 
 /* ---------- init ---------- */
+var APPMODE_STORAGE_KEY = 'controle-veiculo-appmode';
+var SIMPLIFIED_TABS = ['manutencao','abastecimento','compartilhamento','missoes','dashboard'];
+var appMode = 'completo'; // 'completo' | 'simplificado' — controla quais abas aparecem e se o campo de local pede endereço completo ou só um nome
+function applyAppMode(mode, skipRender){
+  appMode = (mode==='simplificado') ? 'simplificado' : 'completo';
+  try{ localStorage.setItem(APPMODE_STORAGE_KEY, appMode); }catch(e){}
+  if(appMode==='simplificado' && SIMPLIFIED_TABS.indexOf(state.tab)===-1){ state.tab = SIMPLIFIED_TABS[0]; }
+  if(!skipRender) render();
+}
+function loadAppMode(){
+  var saved = null;
+  try{ saved = localStorage.getItem(APPMODE_STORAGE_KEY); }catch(e){}
+  appMode = (saved==='simplificado') ? 'simplificado' : 'completo';
+}
+
 var THEME_STORAGE_KEY = 'controle-veiculo-theme';
 var THEMES = {
   preto: {
@@ -3689,6 +3751,7 @@ function loadTheme(){
 }
 
 loadTheme();
+loadAppMode();
 load();
 render();
 
