@@ -812,7 +812,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev55'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev56'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1648,7 +1648,7 @@ function render(){
   var app = document.getElementById('app');
   if(!authChecked){ app.innerHTML = renderAuthSplash(); return; }
   if(!authUser){ app.innerHTML = renderLoginScreen(); attachEvents(); return; }
-  if(appMode==='simplificado' && SIMPLIFIED_TABS.indexOf(state.tab)===-1){ state.tab = SIMPLIFIED_TABS[0]; }
+  if(activeTabKeys().indexOf(state.tab)===-1){ state.tab = activeTabKeys()[0]; }
   var stats = computeStats();
   var dashboardStats = state.tab==='dashboard' ? computeStatsForVehicle(state.activeVehicleId, dashFilterStart, dashFilterEnd) : null;
   var html = '';
@@ -1780,9 +1780,9 @@ function renderTabs(){
     {key:'missoes', label:'Missões', ic:'award', color:'var(--amber)'},
     {key:'dashboard', label:'Dashboard', ic:'dash', color:'var(--muted)'}
   ];
-  var tabs = (appMode==='simplificado')
-    ? allTabs.filter(function(t){ return SIMPLIFIED_TABS.indexOf(t.key)!==-1; })
-    : allTabs;
+  var tabs = (appMode==='completo')
+    ? allTabs
+    : allTabs.filter(function(t){ return activeTabKeys().indexOf(t.key)!==-1; });
   var html = '<div class="tabs">';
   tabs.forEach(function(t){
     html += '<button class="tab-btn '+(state.tab===t.key?'active':'')+'" data-action="set-tab" data-tab="'+t.key+'" aria-label="'+esc(t.label)+'">'+
@@ -2657,7 +2657,7 @@ function odoFieldHtml(value){
 }
 
 function addressFieldHtml(value, label, category){
-  if(appMode==='simplificado') return simplifiedLocationFieldHtml(value, category);
+  if(usesSimpleLocation()) return simplifiedLocationFieldHtml(value, category);
   label = label || 'Endereço';
   var saved = ((state.locations && state.locations[category]) || []).slice().sort(function(a,b){
     return (a.name||'').localeCompare(b.name||'', 'pt-BR');
@@ -2930,25 +2930,45 @@ function computeMaintenanceAlerts(vehicleId, currentOdo){
   return alerts.sort(function(a,b){ return a.remaining - b.remaining; });
 }
 
+var TAB_LABELS = { manutencao:'Manutenção', abastecimento:'Abastecimento', ocorrencias:'Ocorrências', percurso:'Percurso', compartilhamento:'Conversa', missoes:'Missões', dashboard:'Dashboard' };
+function renderCustomModePanel(){
+  var html = '<div style="background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:12px; margin:2px 0 4px;">' +
+    '<span class="field-label" style="display:block; margin-bottom:8px;">Abas que ficam visíveis</span>';
+  ALL_TABS.forEach(function(key){
+    var checked = customTabs.indexOf(key)!==-1;
+    html += '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--border);" data-action="toggle-custom-tab" data-tab="'+key+'">' +
+      '<span style="font-size:13px;">'+TAB_LABELS[key]+'</span>' +
+      '<span class="odo-quick-btn" style="pointer-events:none;">'+(checked?'Ativada':'Desativada')+'</span>' +
+    '</div>';
+  });
+  html += '<span class="field-label" style="display:block; margin:16px 0 8px;">Como marcar o local</span>' +
+    '<div style="display:flex; gap:8px;">' +
+      '<button class="odo-quick-btn" data-action="select-custom-locationmode" data-locmode="endereco" style="flex:1; padding:10px;'+(customLocationMode==='endereco'?' border-color:var(--amber); color:var(--amber);':'')+'">Endereço completo</button>' +
+      '<button class="odo-quick-btn" data-action="select-custom-locationmode" data-locmode="nome" style="flex:1; padding:10px;'+(customLocationMode==='nome'?' border-color:var(--amber); color:var(--amber);':'')+'">Somente nome</button>' +
+    '</div>' +
+  '</div>';
+  return html;
+}
 function renderSettingsModal(){
   var html = '<div class="overlay" data-action="close-modal-bg">' +
     '<div class="sheet" onclick="event.stopPropagation()">' +
       '<div class="sheet-head"><h2>Configurações</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
       '<span class="field-label" style="display:block; margin-bottom:10px;">Versão do aplicativo</span>';
   var appModeOptions = [
-    {key:'completo', name:'Completo', desc:'Todas as abas, com endereço completo e busca no mapa.'},
-    {key:'simplificado', name:'Simplificado', desc:'Manutenção, Abastecimento, Conversa, Missões e Dashboard. O local é só um nome.'}
+    {key:'completo', name:'Completo'},
+    {key:'simplificado', name:'Simplificado'},
+    {key:'personalizado', name:'Personalizado'}
   ];
   appModeOptions.forEach(function(m){
     var isActive = m.key === appMode;
     html += '<div class="theme-row '+(isActive?'active':'')+'" data-action="select-appmode" data-appmode="'+m.key+'">' +
-      '<div style="flex:1; min-width:0;">' +
-        '<span class="theme-name" style="display:block;">'+m.name+'</span>' +
-        '<span style="font-size:11px; color:var(--muted);">'+m.desc+'</span>' +
-      '</div>' +
+      '<span class="theme-name" style="flex:1;">'+m.name+'</span>' +
       (isActive ? '<span class="theme-check">'+icon('check',18)+'</span>' : '') +
     '</div>';
   });
+  if(appMode==='personalizado'){
+    html += renderCustomModePanel();
+  }
   html += '<span class="field-label" style="display:block; margin:22px 0 10px;">Aparência do aplicativo</span>';
   Object.keys(THEMES).forEach(function(key){
     var t = THEMES[key];
@@ -3242,6 +3262,23 @@ function attachEvents(){
       else if(action==='open-settings'){ openModal('settings'); }
       else if(action==='select-theme'){ applyTheme(el.getAttribute('data-theme')); }
       else if(action==='select-appmode'){ applyAppMode(el.getAttribute('data-appmode')); }
+      else if(action==='toggle-custom-tab'){
+        var toggleKey = el.getAttribute('data-tab');
+        var tIdx = customTabs.indexOf(toggleKey);
+        if(tIdx!==-1){
+          if(customTabs.length>1) customTabs.splice(tIdx,1); // sempre mantém pelo menos uma aba ativa
+        } else {
+          customTabs.push(toggleKey);
+        }
+        saveCustomConfig();
+        if(activeTabKeys().indexOf(state.tab)===-1){ state.tab = activeTabKeys()[0]; }
+        render();
+      }
+      else if(action==='select-custom-locationmode'){
+        customLocationMode = (el.getAttribute('data-locmode')==='nome') ? 'nome' : 'endereco';
+        saveCustomConfig();
+        render();
+      }
       else if(action==='add-vehicle'){ editingVehicleId = null; vehiclePhotoDraft = null; openModal('vehicle'); }
       else if(action==='edit-vehicle'){
         e.stopPropagation();
@@ -3582,8 +3619,8 @@ function attachEvents(){
       });
     }
     // carrega a localização atual automaticamente, só quando o campo ainda está vazio (lançamento novo)
-    // — recurso exclusivo do modo Completo; no modo Simplificado não há endereço/GPS envolvido
-    if(appMode==='completo' && !addressEl.value && navigator.geolocation){
+    // — recurso indisponível quando o local é marcado só por nome (Simplificado, ou Personalizado com "Somente nome")
+    if(!usesSimpleLocation() && !addressEl.value && navigator.geolocation){
       navigator.geolocation.getCurrentPosition(function(pos){
         var lat = pos.coords.latitude, lng = pos.coords.longitude;
         if(addressEl.value) return; // o usuário já digitou algo enquanto a localização carregava
@@ -3705,18 +3742,40 @@ function attachEvents(){
 
 /* ---------- init ---------- */
 var APPMODE_STORAGE_KEY = 'controle-veiculo-appmode';
+var CUSTOM_CONFIG_STORAGE_KEY = 'controle-veiculo-custommode';
+var ALL_TABS = ['manutencao','abastecimento','ocorrencias','percurso','compartilhamento','missoes','dashboard'];
 var SIMPLIFIED_TABS = ['manutencao','abastecimento','compartilhamento','missoes','dashboard'];
-var appMode = 'completo'; // 'completo' | 'simplificado' — controla quais abas aparecem e se o campo de local pede endereço completo ou só um nome
+var appMode = 'completo'; // 'completo' | 'simplificado' | 'personalizado' — controla quais abas aparecem e se o campo de local pede endereço completo ou só um nome
+var customTabs = ALL_TABS.slice(); // abas ativas no modo Personalizado
+var customLocationMode = 'endereco'; // 'endereco' | 'nome' — forma de marcar o local no modo Personalizado
+function activeTabKeys(){
+  if(appMode==='simplificado') return SIMPLIFIED_TABS;
+  if(appMode==='personalizado') return customTabs.length ? customTabs : ['manutencao'];
+  return ALL_TABS;
+}
+function usesSimpleLocation(){
+  return (appMode==='simplificado') || (appMode==='personalizado' && customLocationMode==='nome');
+}
 function applyAppMode(mode, skipRender){
-  appMode = (mode==='simplificado') ? 'simplificado' : 'completo';
+  appMode = (mode==='simplificado' || mode==='personalizado') ? mode : 'completo';
   try{ localStorage.setItem(APPMODE_STORAGE_KEY, appMode); }catch(e){}
-  if(appMode==='simplificado' && SIMPLIFIED_TABS.indexOf(state.tab)===-1){ state.tab = SIMPLIFIED_TABS[0]; }
+  if(activeTabKeys().indexOf(state.tab)===-1){ state.tab = activeTabKeys()[0]; }
   if(!skipRender) render();
 }
 function loadAppMode(){
   var saved = null;
   try{ saved = localStorage.getItem(APPMODE_STORAGE_KEY); }catch(e){}
-  appMode = (saved==='simplificado') ? 'simplificado' : 'completo';
+  appMode = (saved==='simplificado' || saved==='personalizado') ? saved : 'completo';
+}
+function saveCustomConfig(){
+  try{ localStorage.setItem(CUSTOM_CONFIG_STORAGE_KEY, JSON.stringify({ tabs: customTabs, locationMode: customLocationMode })); }catch(e){}
+}
+function loadCustomConfig(){
+  var saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(CUSTOM_CONFIG_STORAGE_KEY)); }catch(e){}
+  var savedTabs = (saved && Array.isArray(saved.tabs)) ? saved.tabs.filter(function(t){ return ALL_TABS.indexOf(t)!==-1; }) : [];
+  customTabs = savedTabs.length ? savedTabs : ALL_TABS.slice();
+  customLocationMode = (saved && saved.locationMode==='nome') ? 'nome' : 'endereco';
 }
 
 var THEME_STORAGE_KEY = 'controle-veiculo-theme';
@@ -3752,6 +3811,7 @@ function loadTheme(){
 
 loadTheme();
 loadAppMode();
+loadCustomConfig();
 load();
 render();
 
