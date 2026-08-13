@@ -176,6 +176,14 @@
   .stat-card{ background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px; min-width:0; }
   .stat-head{ display:flex; align-items:center; gap:5px; font-size:10px; color:var(--muted); margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .stat-val{ font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .resumo-card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px 15px; margin-top:16px; }
+  .resumo-card-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }
+  .resumo-card-head h3{ margin:0; font-size:12.5px; font-weight:800; display:flex; align-items:baseline; gap:5px; }
+  .resumo-card-head .month{ color:var(--dim); font-weight:600; font-size:11px; }
+  .resumo-link{ display:flex; align-items:center; gap:4px; background:none; border:none; color:var(--dim); font-size:10.5px; font-weight:700; padding:0; cursor:pointer; }
+  .resumo-link:hover{ color:var(--text); }
+  .resumo-card .stat-grid{ margin-top:0; }
+  .resumo-card .stat-card{ background:var(--panel2); }
 
   /* ---------- tabs ---------- */
   .tabs{ display:flex; gap:4px; padding:8px; background:var(--bg2); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
@@ -361,6 +369,14 @@
   .dash-filter-btn.primary{ background:var(--amber); border-color:var(--amber); color:var(--on-accent); font-weight:700; }
   .dash-card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; height:250px; position:relative; }
   .dash-card.short{ height:170px; }
+  .ov-group-label{ font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim2); font-weight:700; margin:12px 2px 8px; }
+  .ov-group-label:first-of-type{ margin-top:0; }
+  .ov-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .ov-card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:11px 12px; min-width:0; }
+  .ov-card.highlight{ background:var(--panel2); border-color:var(--border2); }
+  .ov-head{ display:flex; align-items:center; gap:5px; font-size:10.5px; color:var(--muted); margin-bottom:7px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ov-val{ font-size:15.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ov-sub{ font-size:10px; color:var(--dim); margin-top:4px; }
   .legend{ display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; font-size:11.5px; color:var(--muted); }
   .legend span{ display:inline-flex; align-items:center; gap:6px; }
   .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
@@ -854,7 +870,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev57'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev58'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1488,7 +1504,22 @@ function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
   var totalAllCosts = Number(totalManutencao||0) + Number(totalCombustivel||0) + Number(totalCustoOcorrencias||0);
   var costPerMonth = (totalDaysUsed && totalDaysUsed>0) ? (totalAllCosts/totalDaysUsed)*30 : null;
 
-  return { totalManutencao:totalManutencao, totalCombustivel:totalCombustivel, currentOdo:currentOdo, totalKmTraveled:totalKmTraveled, avgKmPerDay:avgKmPerDay, avgConsumo:avgConsumo, lastKml:lastKml, monthly:monthly, serviceBreakdown:serviceBreakdown, consumptionTrend:consumptionTrend, totalOcorrencias:totalOcorrencias, totalCustoOcorrencias:totalCustoOcorrencias, occurrenceBreakdown:occurrenceBreakdown, totalDaysUsed:totalDaysUsed, costPerMonth:costPerMonth };
+  // ---- mês atual: usado no cabeçalho (só faz sentido na chamada sem filtro de período, que é o caso de computeStats()) ----
+  var MESES_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  var nowDate = new Date();
+  var monthKeyNow = nowDate.getFullYear()+'-'+String(nowDate.getMonth()+1).padStart(2,'0');
+  var monthStartStr = monthKeyNow+'-01';
+  var monthManutencao = maint.filter(function(m){ return (m.date||'').slice(0,7)===monthKeyNow; }).reduce(function(s,m){return s+Number(m.cost||0);},0);
+  var monthCombustivel = fuelList.filter(function(f){ return (f.date||'').slice(0,7)===monthKeyNow; }).reduce(function(s,f){return s+Number(f.cost||0);},0);
+  var beforeMonthOdo = maint.filter(function(m){return m.date && m.date<monthStartStr && !isNaN(Number(m.odometer));}).map(function(m){return Number(m.odometer);})
+    .concat(fuelList.filter(function(f){return f.date && f.date<monthStartStr && !isNaN(Number(f.odometer));}).map(function(f){return Number(f.odometer);}))
+    .concat(odoLogList.filter(function(o){return o.date && o.date<monthStartStr && !isNaN(Number(o.odometer));}).map(function(o){return Number(o.odometer);}));
+  if(initOdo!=null && (!vehicle || !vehicle.acquisitionDate || vehicle.acquisitionDate<monthStartStr)){ beforeMonthOdo.push(initOdo); }
+  var kmThisMonth = beforeMonthOdo.length ? Math.max(0, currentOdo - Math.max.apply(null, beforeMonthOdo)) : null;
+  var monthLabelRaw = MESES_PT[nowDate.getMonth()]+' '+nowDate.getFullYear();
+  var monthLabel = monthLabelRaw.charAt(0).toUpperCase()+monthLabelRaw.slice(1);
+
+  return { totalManutencao:totalManutencao, totalCombustivel:totalCombustivel, currentOdo:currentOdo, totalKmTraveled:totalKmTraveled, avgKmPerDay:avgKmPerDay, avgConsumo:avgConsumo, lastKml:lastKml, monthly:monthly, serviceBreakdown:serviceBreakdown, consumptionTrend:consumptionTrend, totalOcorrencias:totalOcorrencias, totalCustoOcorrencias:totalCustoOcorrencias, occurrenceBreakdown:occurrenceBreakdown, totalDaysUsed:totalDaysUsed, costPerMonth:costPerMonth, kmThisMonth:kmThisMonth, monthManutencao:monthManutencao, monthCombustivel:monthCombustivel, monthLabel:monthLabel, totalAllCosts:totalAllCosts };
 }
 
 function computeStats(){
@@ -1815,30 +1846,32 @@ function renderHeader(stats){
           '<button class="odo-update-btn" data-action="open-odometer-form" aria-label="Atualizar odômetro">'+icon('edit',11)+' Atualizar</button>' +
         '</div>' +
         '<span class="odo-digits">'+digits+'<span class="odo-suffix">km</span></span>' +
-        '<div class="odo-divider"></div>' +
-        '<div class="odo-label">Km percorrido</div>' +
-        '<div class="consumo-val">'+formatKm(stats.totalKmTraveled)+'</div>' +
       '</div>' +
       '<div class="usage-card">' +
-        '<div class="odo-label">Média km/dia</div>' +
-        '<div class="consumo-val">'+(stats.avgKmPerDay!=null ? stats.avgKmPerDay.toLocaleString('pt-BR',{maximumFractionDigits:1})+' km' : '—')+'</div>' +
-        (stats.totalDaysUsed!=null ? '<div class="consumo-sub">'+formatMonthsDays(stats.totalDaysUsed)+' no total</div>' : '') +
-        (stats.costPerMonth!=null ? '<div class="consumo-sub">'+formatBRL(stats.costPerMonth)+'/mês (todos os custos)</div>' : '') +
+        '<div class="odo-label">Km rodado este mês</div>' +
+        '<div class="consumo-val">'+(stats.kmThisMonth!=null ? formatKm(stats.kmThisMonth) : '—')+'</div>' +
+        '<div class="consumo-sub">'+esc(stats.monthLabel)+'</div>' +
       '</div>' +
     '</div>' +
     alertsHtml +
-    '<div class="stat-grid">' +
-      '<div class="stat-card">' +
-        '<div class="stat-head">'+icon('wrench',12,'var(--amber)')+'<span>Manutenção</span></div>' +
-        '<div class="stat-val">'+formatBRL(stats.totalManutencao)+'</div>' +
+    '<div class="resumo-card">' +
+      '<div class="resumo-card-head">' +
+        '<h3>Resumo mensal <span class="month">· '+esc(stats.monthLabel)+'</span></h3>' +
+        '<button class="resumo-link" data-action="set-tab" data-tab="dashboard">'+icon('dash',11)+' Dashboard</button>' +
       '</div>' +
-      '<div class="stat-card">' +
-        '<div class="stat-head">'+icon('fuel',12,'var(--teal)')+'<span>Combustível</span></div>' +
-        '<div class="stat-val">'+formatBRL(stats.totalCombustivel)+'</div>' +
-      '</div>' +
-      '<div class="stat-card">' +
-        '<div class="stat-head">'+icon('gauge',12,'var(--muted)')+'<span>Último km/l</span></div>' +
-        '<div class="stat-val">'+(stats.lastKml!=null ? stats.lastKml.toFixed(1)+' km/l' : '—')+'</div>' +
+      '<div class="stat-grid">' +
+        '<div class="stat-card">' +
+          '<div class="stat-head">'+icon('wrench',12,'var(--amber)')+'<span>Manutenção</span></div>' +
+          '<div class="stat-val">'+formatBRL(stats.monthManutencao)+'</div>' +
+        '</div>' +
+        '<div class="stat-card">' +
+          '<div class="stat-head">'+icon('fuel',12,'var(--teal)')+'<span>Combustível</span></div>' +
+          '<div class="stat-val">'+formatBRL(stats.monthCombustivel)+'</div>' +
+        '</div>' +
+        '<div class="stat-card">' +
+          '<div class="stat-head">'+icon('gauge',12,'var(--muted)')+'<span>Último km/l</span></div>' +
+          '<div class="stat-val">'+(stats.lastKml!=null ? stats.lastKml.toFixed(1)+' km/l' : '—')+'</div>' +
+        '</div>' +
       '</div>' +
     '</div>' +
   '</div>';
@@ -2912,6 +2945,52 @@ function renderDashboard(stats){
       '<div class="dash-filter-actions">' +
         '<button class="dash-filter-btn" data-action="clear-dash-filter">Limpar</button>' +
         '<button class="dash-filter-btn primary" data-action="apply-dash-filter">Filtrar</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  // ---- Visão geral: dados que antes viviam soltos no cabeçalho (km total, média km/dia, custos médios etc.) ----
+  var costPerDay = stats.costPerMonth!=null ? stats.costPerMonth/30 : null;
+  var costPerKm = (stats.totalKmTraveled>0) ? (stats.totalAllCosts/stats.totalKmTraveled) : null;
+  html += '<div>' +
+    '<h3>Visão geral do veículo'+((dashFilterStart||dashFilterEnd) ? ' (período filtrado)' : '')+'</h3>' +
+    '<div class="ov-group-label">Uso</div>' +
+    '<div class="ov-grid">' +
+      '<div class="ov-card">' +
+        '<div class="ov-head">'+icon('route',11,'var(--teal)')+'<span>Km percorrido</span></div>' +
+        '<div class="ov-val">'+formatKm(stats.totalKmTraveled)+'</div>' +
+      '</div>' +
+      '<div class="ov-card">' +
+        '<div class="ov-head">'+icon('calendar',11,'var(--muted)')+'<span>Tempo de uso</span></div>' +
+        '<div class="ov-val" style="font-size:14px;">'+(stats.totalDaysUsed!=null ? formatMonthsDays(stats.totalDaysUsed) : '—')+'</div>' +
+      '</div>' +
+      '<div class="ov-card">' +
+        '<div class="ov-head">'+icon('gauge',11,'var(--muted)')+'<span>Média km/dia</span></div>' +
+        '<div class="ov-val">'+(stats.avgKmPerDay!=null ? stats.avgKmPerDay.toLocaleString('pt-BR',{maximumFractionDigits:1})+' km' : '—')+'</div>' +
+      '</div>' +
+      '<div class="ov-card">' +
+        '<div class="ov-head">'+icon('droplet',11,'var(--teal)')+'<span>Consumo médio</span></div>' +
+        '<div class="ov-val">'+(stats.avgConsumo!=null ? stats.avgConsumo.toFixed(1)+' km/l' : '—')+'</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ov-group-label">Custos</div>' +
+    '<div class="ov-grid">' +
+      '<div class="ov-card highlight">' +
+        '<div class="ov-head"><span>Custo total</span></div>' +
+        '<div class="ov-val">'+formatBRL(stats.totalAllCosts)+'</div>' +
+        '<div class="ov-sub">manutenção + combustível + ocorrências</div>' +
+      '</div>' +
+      '<div class="ov-card">' +
+        '<div class="ov-head"><span>Custo por km</span></div>' +
+        '<div class="ov-val">'+(costPerKm!=null ? formatBRL(costPerKm)+'/km' : '—')+'</div>' +
+      '</div>' +
+      '<div class="ov-card">' +
+        '<div class="ov-head"><span>Média R$/mês</span></div>' +
+        '<div class="ov-val">'+(stats.costPerMonth!=null ? formatBRL(stats.costPerMonth) : '—')+'</div>' +
+      '</div>' +
+      '<div class="ov-card">' +
+        '<div class="ov-head"><span>Média R$/dia</span></div>' +
+        '<div class="ov-val">'+(costPerDay!=null ? formatBRL(costPerDay) : '—')+'</div>' +
       '</div>' +
     '</div>' +
   '</div>';
