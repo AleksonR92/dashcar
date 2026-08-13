@@ -211,7 +211,7 @@
   .chat-bubble-head{ display:flex; align-items:center; gap:6px; font-size:12.5px; }
   .chat-bubble-sub{ font-size:11px; color:var(--dim); margin-top:2px; }
   .chat-bubble-foot{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; font-size:10.5px; color:var(--dim); }
-  .bubble-react-btn{ background:transparent; border:none; color:var(--dim); cursor:pointer; padding:1px; display:inline-flex; align-items:center; }
+  .bubble-react-btn{ background:transparent; border:none; color:var(--dim); cursor:pointer; padding:1px 4px; display:inline-flex; align-items:center; font-size:12px; font-weight:700; line-height:1; opacity:.6; }
   .bubble-reaction-badge{ position:absolute; bottom:-10px; font-size:13px; background:var(--bg2); border:1px solid var(--border2); border-radius:999px; padding:1px 6px; line-height:1.5; }
   .chat-bubble.mine .bubble-reaction-badge{ right:6px; }
   .chat-bubble.theirs .bubble-reaction-badge{ left:6px; }
@@ -1029,12 +1029,14 @@ function handleSignedIn(user){
     }
     backfillMissions();
     checkPendingInvite();
+    syncLeaderboardEntry(); // garante que a entrada do ranking existe/está atualizada mesmo se a pessoa só abrir o app sem salvar nada
     authError = '';
     render();
   }).catch(function(){
     authError = 'Não foi possível carregar seus dados da nuvem agora. Mostrando a última cópia salva neste aparelho.';
     backfillMissions();
     checkPendingInvite();
+    syncLeaderboardEntry();
     render();
   });
 }
@@ -2019,35 +2021,78 @@ function cancelAddFriendInline(){
 /* ---------- convite por link ---------- */
 // Monta um link que já vem com meu e-mail e nome — quem abrir, se estiver logado, pode me adicionar
 // como amigo com 1 toque, e eu sou adicionado de volta automaticamente na próxima vez que eu abrir o app.
+// Codifica e-mail+nome num token opaco (base64) — o link de convite não expõe o e-mail em texto puro.
+function encodeInviteToken(emailLower, name){
+  var payload = emailLower + '|' + name;
+  return btoa(unescape(encodeURIComponent(payload)));
+}
+function decodeInviteToken(token){
+  try{
+    var payload = decodeURIComponent(escape(atob(token)));
+    var sep = payload.indexOf('|');
+    if(sep===-1) return null;
+    return { email: payload.slice(0, sep).trim().toLowerCase(), name: payload.slice(sep+1).trim() };
+  }catch(e){ return null; }
+}
 function buildInviteLink(){
   if(!authUser) return '';
   var base = window.location.origin + window.location.pathname;
-  return base + '?convite=' + encodeURIComponent(authUser.email.toLowerCase()) + '&nome=' + encodeURIComponent(authUser.displayName || authUser.email);
+  var token = encodeInviteToken(authUser.email.toLowerCase(), authUser.displayName || authUser.email);
+  return base + '?c=' + encodeURIComponent(token);
 }
 function shareInviteLink(){
   if(!authUser) return;
   var link = buildInviteLink();
-  var text = 'Adicione-me como amigo no TanqueCheio pra compartilharmos registros de manutenção, abastecimento e ocorrências:';
+  var text = 'Me adicione no app';
   if(navigator.share){
     navigator.share({ title:'TanqueCheio', text:text, url:link }).catch(function(){ /* usuário cancelou o compartilhamento — sem problema */ });
     return;
   }
+  copyInviteLinkSilently(link);
+}
+// Copia o link sem nunca exibi-lo em tela (nem num prompt) — só a mensagem "Link copiado!" aparece.
+function copyInviteLinkSilently(link){
+  function onCopied(){
+    inviteLinkCopied = true;
+    render();
+    setTimeout(function(){ inviteLinkCopied = false; render(); }, 3000);
+  }
   if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(link).then(function(){
-      inviteLinkCopied = true;
-      render();
-      setTimeout(function(){ inviteLinkCopied = false; render(); }, 3000);
-    }).catch(function(){ window.prompt('Copie o link e envie pro seu amigo:', link); });
+    navigator.clipboard.writeText(link).then(onCopied).catch(function(){ copyViaHiddenTextarea(link, onCopied); });
     return;
   }
-  window.prompt('Copie o link e envie pro seu amigo:', link);
+  copyViaHiddenTextarea(link, onCopied);
 }
-// Verifica se a URL trouxe um convite (?convite=email&nome=Nome) — chamado logo após o login confirmar.
+function copyViaHiddenTextarea(text, onSuccess){
+  try{
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    var ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    if(ok) onSuccess();
+  }catch(e){ /* cópia automática indisponível neste navegador — sem exibir o link cru como alternativa */ }
+}
+// Verifica se a URL trouxe um convite — chamado logo após o login confirmar.
+// Formato atual: ?c=<token mascarado>. Mantém suporte ao formato antigo (?convite=email&nome=Nome)
+// pra links já compartilhados antes desta mudança continuarem funcionando.
 function checkPendingInvite(){
   try{
     var params = new URLSearchParams(window.location.search);
-    var inviteEmail = (params.get('convite')||'').trim().toLowerCase();
-    var inviteName = (params.get('nome')||'').trim();
+    var inviteEmail = '', inviteName = '';
+    var token = params.get('c');
+    if(token){
+      var decoded = decodeInviteToken(token);
+      if(decoded){ inviteEmail = decoded.email; inviteName = decoded.name; }
+    } else {
+      inviteEmail = (params.get('convite')||'').trim().toLowerCase();
+      inviteName = (params.get('nome')||'').trim();
+    }
     if(inviteEmail && inviteEmail.indexOf('@')!==-1 && authUser && authUser.email
        && inviteEmail!==authUser.email.toLowerCase() && !getContactName(inviteEmail)){
       pendingInvite = { email: inviteEmail, name: inviteName || inviteEmail };
@@ -2403,7 +2448,7 @@ function renderShareTab(){
       var pickerHtml = pickerOpen ? ('<div class="reaction-picker">'+REACTION_EMOJIS.map(function(em){
         return '<button data-action="react-share" data-id="'+esc(s.id)+'" data-emoji="'+esc(em)+'">'+em+'</button>';
       }).join('')+'</div>') : '';
-      var reactBtnHtml = '<button class="bubble-react-btn" data-action="toggle-reaction" data-id="'+esc(s.id)+'" aria-label="Reagir" style="font-size:13px;">🙂</button>';
+      var reactBtnHtml = '<button class="bubble-react-btn" data-action="toggle-reaction" data-id="'+esc(s.id)+'" aria-label="Reagir">^</button>';
       if(s.kind==='message'){
         html += '<div class="chat-bubble '+(mine?'mine':'theirs')+'">' +
           reactionHtml +
