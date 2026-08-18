@@ -126,6 +126,7 @@
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .header-id p{ margin:2px 0 0; font-size:11.5px; color:var(--muted); }
   .header-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .header-top-right{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
   .saving-tag{ font-size:11px; color:var(--dim); font-style:italic; }
   .btn-ghost{
     background:transparent; border:1px solid var(--border2); color:var(--text);
@@ -979,7 +980,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev59'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev60'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1911,6 +1912,9 @@ function renderLoginScreen(){
   '</div>';
 }
 function renderHeader(stats){
+  if(!state.gamification) state.gamification = { xp:0, completions:{} };
+  var headerLvl = getLevelInfo(state.gamification.xp||0);
+  var headerTier = getLevelTier(headerLvl.level);
   var v = state.vehicles.find(function(x){ return x.id === state.activeVehicleId; });
   var title = v ? getVehicleLabel(v) : (state.vehicles.length ? 'Selecione um veículo' : 'Painel do Veículo');
   var sub = v ? [v.plate, v.color].filter(Boolean).join(' · ') : '';
@@ -1950,7 +1954,10 @@ function renderHeader(stats){
           '</div>' +
         '</div>' +
       '</div>' +
-      '<button class="icon-btn" data-action="open-settings" aria-label="Configurações">'+icon('settings',14)+'</button>' +
+      '<div class="header-top-right">' +
+        '<div data-action="open-badges-gallery" style="cursor:pointer;">'+gearBadge(32, headerTier.name, {level:headerLvl.level})+'</div>' +
+        '<button class="icon-btn" data-action="open-settings" aria-label="Configurações">'+icon('settings',14)+'</button>' +
+      '</div>' +
     '</div>' +
     '<div class="odo-usage-row">' +
       '<div class="odo-card">' +
