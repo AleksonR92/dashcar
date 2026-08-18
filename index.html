@@ -979,7 +979,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev58'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev59'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1093,6 +1093,7 @@ let state = {
   locations: { manutencao: [], combustivel: [], ocorrencia: [] }, // locais salvos por tema: { id, name, address }
   odometerLogs: [], // atualizações avulsas de odômetro, independentes de manutenção/abastecimento/ocorrência: { id, vehicleId, date, odometer }
   tabSoundEnabled: true, // som de ferramenta ao navegar pra aba de Manutenção
+  fuelGaugeEnabled: true, // exibir o marcador de nível de combustível ao abastecer; desativado também remove o card "Último km/l"
   percursos: [], // viagens rastreadas por GPS: { id, vehicleId, date, startAddress, endAddress, km, startTime, endTime }
   contacts: {} // nomes salvos por e-mail pra conversa: { 'fulano@exemplo.com': 'Fulano' }
 };
@@ -1451,6 +1452,7 @@ function applyLoadedData(parsed){
   };
   state.odometerLogs = Array.isArray(parsed.odometerLogs) ? parsed.odometerLogs : [];
   state.tabSoundEnabled = (parsed.tabSoundEnabled!==false);
+  state.fuelGaugeEnabled = (parsed.fuelGaugeEnabled!==false);
   state.percursos = Array.isArray(parsed.percursos) ? parsed.percursos : [];
   state.contacts = (parsed.contacts && typeof parsed.contacts==='object') ? parsed.contacts : {};
   if(Array.isArray(parsed.vehicles)){
@@ -1474,7 +1476,7 @@ function load(){
   }catch(e){ applyDefaultMaintenanceIntervals(); /* start empty */ }
 }
 function buildSyncPayload(){
-  return { maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations, odometerLogs: state.odometerLogs, tabSoundEnabled: state.tabSoundEnabled, percursos: state.percursos, contacts: state.contacts };
+  return { maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations, odometerLogs: state.odometerLogs, tabSoundEnabled: state.tabSoundEnabled, fuelGaugeEnabled: state.fuelGaugeEnabled, percursos: state.percursos, contacts: state.contacts };
 }
 function persistToCloud(){
   if(!authUser || !window.__fb) return;
@@ -1934,8 +1936,6 @@ function renderHeader(stats){
       '</div>';
     }).join('') + '</div>';
   }
-  var headerLvl = getLevelInfo((state.gamification && state.gamification.xp) || 0);
-  var headerTier = getLevelTier(headerLvl.level);
   return '' +
   '<div class="header">' +
     '<div class="header-top">' +
@@ -1950,10 +1950,7 @@ function renderHeader(stats){
           '</div>' +
         '</div>' +
       '</div>' +
-      '<div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">' +
-        '<div data-action="open-badges-gallery" aria-label="Meu nível" style="cursor:pointer;">'+gearBadge(30, headerTier.name, {level:headerLvl.level})+'</div>' +
-        '<button class="icon-btn" data-action="open-settings" aria-label="Configurações">'+icon('settings',14)+'</button>' +
-      '</div>' +
+      '<button class="icon-btn" data-action="open-settings" aria-label="Configurações">'+icon('settings',14)+'</button>' +
     '</div>' +
     '<div class="odo-usage-row">' +
       '<div class="odo-card">' +
@@ -1984,10 +1981,11 @@ function renderHeader(stats){
           '<div class="stat-head">'+icon('fuel',12,'var(--teal)')+'<span>Combustível</span></div>' +
           '<div class="stat-val">'+formatBRL(stats.monthCombustivel)+'</div>' +
         '</div>' +
-        '<div class="stat-card">' +
-          '<div class="stat-head">'+icon('gauge',12,'var(--muted)')+'<span>Último km/l</span></div>' +
-          '<div class="stat-val">'+(stats.lastKml!=null ? stats.lastKml.toFixed(1)+' km/l' : '—')+'</div>' +
-        '</div>' +
+        (state.fuelGaugeEnabled!==false ?
+          '<div class="stat-card">' +
+            '<div class="stat-head">'+icon('gauge',12,'var(--muted)')+'<span>Último km/l</span></div>' +
+            '<div class="stat-val">'+(stats.lastKml!=null ? stats.lastKml.toFixed(1)+' km/l' : '—')+'</div>' +
+          '</div>' : '') +
       '</div>' +
     '</div>' +
   '</div>';
@@ -3407,13 +3405,14 @@ function renderFuelForm(){
       '<div class="sheet-head"><h2>'+(isEdit?'Editar abastecimento':'Novo abastecimento')+'</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
       fieldHtml('Tipo de combustível', '<select id="f-fueltype">'+opts+'</select>') +
       fieldHtml('Data', '<input id="f-date" type="date" value="'+esc(pf.date || new Date().toISOString().slice(0,10))+'">') +
-      '<div class="field" style="margin-bottom:16px">' +
-        '<span class="field-label">Nível do ponteiro antes de abastecer</span>' +
-        '<div class="gauge-box">' +
-          renderGaugeSVG(fuelGaugeFraction, gaugeDivisions) +
-          '<div id="gauge-readout" class="gauge-readout">'+fuelLevelLabel(fuelGaugeFraction)+' · ~'+litersEstimate+' L de '+capacity+' L</div>' +
-        '</div>' +
-      '</div>' +
+      (state.fuelGaugeEnabled!==false ?
+        '<div class="field" style="margin-bottom:16px">' +
+          '<span class="field-label">Nível do ponteiro antes de abastecer</span>' +
+          '<div class="gauge-box">' +
+            renderGaugeSVG(fuelGaugeFraction, gaugeDivisions) +
+            '<div id="gauge-readout" class="gauge-readout">'+fuelLevelLabel(fuelGaugeFraction)+' · ~'+litersEstimate+' L de '+capacity+' L</div>' +
+          '</div>' +
+        '</div>' : '') +
       '<div class="field-row">' +
         fieldHtml('Litros adicionados', '<input id="f-liters" type="text" inputmode="decimal" value="'+toMaskedStr(pf.liters)+'" placeholder="0,00">') +
         fieldHtml('Custo por litro (R$)', '<input id="f-priceperliter" type="text" inputmode="decimal" value="'+toMaskedStr(pf.pricePerLiter!=null ? pf.pricePerLiter : (pf.liters && pf.cost ? pf.cost/pf.liters : null))+'" placeholder="0,00">') +
@@ -3517,14 +3516,16 @@ function computeMaintenanceAlerts(vehicleId, currentOdo){
 var TAB_LABELS = { manutencao:'Manutenção', abastecimento:'Abastecimento', ocorrencias:'Ocorrências', percurso:'Percurso', compartilhamento:'Conversa', missoes:'Missões', dashboard:'Dashboard' };
 function renderCustomModePanel(){
   var html = '<div style="background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:12px; margin:2px 0 4px;">' +
-    '<span class="field-label" style="display:block; margin-bottom:8px;">Abas que ficam visíveis</span>';
+    '<span class="field-label" style="display:block; margin-bottom:10px;">Abas que ficam visíveis</span>' +
+    '<div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:4px;">';
   ALL_TABS.forEach(function(key){
     var checked = customTabs.indexOf(key)!==-1;
-    html += '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--border);" data-action="toggle-custom-tab" data-tab="'+key+'">' +
-      '<span style="font-size:13px;">'+TAB_LABELS[key]+'</span>' +
-      '<span class="odo-quick-btn" style="pointer-events:none;">'+(checked?'Ativada':'Desativada')+'</span>' +
-    '</div>';
+    html += '<button type="button" class="odo-quick-btn" data-action="toggle-custom-tab" data-tab="'+key+'" ' +
+      'style="flex:1 1 calc(50% - 8px); min-width:120px; padding:10px 8px; display:flex; align-items:center; justify-content:center; gap:6px;'+(checked?' border-color:var(--amber); color:var(--amber);':'')+'">' +
+      (checked ? icon('check',13,'var(--amber)') : icon('x',13,'var(--dim2)')) + '<span>'+TAB_LABELS[key]+'</span>' +
+    '</button>';
   });
+  html += '</div>';
   html += '<span class="field-label" style="display:block; margin:16px 0 8px;">Como marcar o local</span>' +
     '<div style="display:flex; gap:8px;">' +
       '<button class="odo-quick-btn" data-action="select-custom-locationmode" data-locmode="endereco" style="flex:1; padding:10px;'+(customLocationMode==='endereco'?' border-color:var(--amber); color:var(--amber);':'')+'">Endereço completo</button>' +
@@ -3572,6 +3573,11 @@ function renderSettingsModal(){
     '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:10px 12px;">' +
       '<span style="font-size:12.5px; color:var(--muted);">Tocar som de ferramenta ao salvar uma manutenção</span>' +
       '<button class="odo-quick-btn" data-action="toggle-tab-sound" style="flex:none;">'+(state.tabSoundEnabled!==false ? 'Ativado' : 'Desativado')+'</button>' +
+    '</div>';
+  html += '<span class="field-label" style="display:block; margin:22px 0 6px;">Indicador de combustível</span>' +
+    '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:10px 12px;">' +
+      '<span style="font-size:12.5px; color:var(--muted);">Marcador de nível ao abastecer. Desativar também remove o card "Último km/l"</span>' +
+      '<button class="odo-quick-btn" data-action="toggle-fuel-gauge" style="flex:none;">'+(state.fuelGaugeEnabled!==false ? 'Ativado' : 'Desativado')+'</button>' +
     '</div>';
   html += '<span class="field-label" style="display:block; margin:22px 0 6px;">Conta</span>' +
     '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:10px 12px;">' +
@@ -3754,6 +3760,10 @@ function attachEvents(){
       }
       else if(action==='toggle-tab-sound'){
         state.tabSoundEnabled = (state.tabSoundEnabled===false);
+        persist();
+      }
+      else if(action==='toggle-fuel-gauge'){
+        state.fuelGaugeEnabled = (state.fuelGaugeEnabled===false);
         persist();
       }
       else if(action==='start-trip'){ startTrip(); }
@@ -4049,8 +4059,8 @@ function attachEvents(){
         if(!date2 || !odo2) return;
         var activeVehicleForFuel = state.vehicles.find(function(v){return v.id===state.activeVehicleId;});
         var capacityNow = activeVehicleForFuel ? activeVehicleForFuel.tankCapacity : DEFAULT_TANK_CAPACITY;
-        var fuelEntry = { date:date2, fuelType:fuelType, liters:liters, cost:cost2, odometer:parseKmValue(odo2), address:address2, gaugeBefore: fuelGaugeFraction, tankCapacityAtEntry: capacityNow };
-        var capIssue = checkTankCapacity(fuelEntry, capacityNow);
+        var fuelEntry = { date:date2, fuelType:fuelType, liters:liters, cost:cost2, odometer:parseKmValue(odo2), address:address2, gaugeBefore: (state.fuelGaugeEnabled!==false ? fuelGaugeFraction : null), tankCapacityAtEntry: capacityNow };
+        var capIssue = (state.fuelGaugeEnabled!==false) ? checkTankCapacity(fuelEntry, capacityNow) : null;
         if(capIssue){
           capacityWarning = capIssue;
           formPrefill = fuelEntry;
@@ -4345,6 +4355,7 @@ var APPMODE_STORAGE_KEY = 'controle-veiculo-appmode';
 var CUSTOM_CONFIG_STORAGE_KEY = 'controle-veiculo-custommode';
 var ALL_TABS = ['manutencao','abastecimento','ocorrencias','percurso','compartilhamento','missoes','dashboard'];
 var SIMPLIFIED_TABS = ['manutencao','abastecimento','compartilhamento','missoes','dashboard'];
+var DEFAULT_NEW_USER_TABS = ['manutencao','abastecimento','missoes','dashboard']; // primeiro acesso: conjunto enxuto de abas habilitadas
 var appMode = 'completo'; // 'completo' | 'simplificado' | 'personalizado' — controla quais abas aparecem e se o campo de local pede endereço completo ou só um nome
 var customTabs = ALL_TABS.slice(); // abas ativas no modo Personalizado
 var customLocationMode = 'endereco'; // 'endereco' | 'nome' — forma de marcar o local no modo Personalizado
@@ -4365,7 +4376,22 @@ function applyAppMode(mode, skipRender){
 function loadAppMode(){
   var saved = null;
   try{ saved = localStorage.getItem(APPMODE_STORAGE_KEY); }catch(e){}
-  appMode = (saved==='simplificado' || saved==='personalizado') ? saved : 'completo';
+  if(saved==='simplificado' || saved==='personalizado' || saved==='completo'){
+    appMode = saved;
+    return;
+  }
+  // nenhuma preferência de modo salva ainda neste aparelho — verifica se é primeiro acesso
+  var hasExistingData = false;
+  try{ hasExistingData = !!localStorage.getItem(STORAGE_KEY); }catch(e){}
+  if(hasExistingData){
+    appMode = 'completo'; // usuário que já usava o app antes deste ajuste — mantém tudo habilitado
+  } else {
+    // primeiro acesso: começa em Personalizado com só Manutenção, Abastecimento, Missões e Dashboard
+    appMode = 'personalizado';
+    customTabs = DEFAULT_NEW_USER_TABS.slice();
+    saveCustomConfig();
+    try{ localStorage.setItem(APPMODE_STORAGE_KEY, appMode); }catch(e){}
+  }
 }
 function saveCustomConfig(){
   try{ localStorage.setItem(CUSTOM_CONFIG_STORAGE_KEY, JSON.stringify({ tabs: customTabs, locationMode: customLocationMode })); }catch(e){}
