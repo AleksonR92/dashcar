@@ -189,11 +189,10 @@
   /* ---------- tabs ---------- */
   .tabs{ display:flex; gap:4px; padding:8px; background:var(--bg2); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .tabs::-webkit-scrollbar{ display:none; }
-  .tab-btn{ position:relative; flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center; padding:11px 4px; border-radius:8px; background:transparent; border:none; color:var(--dim); cursor:pointer; }
+  .tab-btn{ flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center; padding:11px 4px; border-radius:8px; background:transparent; border:none; color:var(--dim); cursor:pointer; }
   .tab-title{ font-size:16px; font-weight:800; margin:14px 4px 8px; }
   .tab-btn .tab-label{ overflow:hidden; text-overflow:ellipsis; }
   .tab-btn.active{ background:var(--panel); color:var(--text); }
-  .tab-unread-dot{ position:absolute; top:6px; right:calc(50% - 15px); width:8px; height:8px; border-radius:999px; background:var(--red); border:2px solid var(--bg2); }
 
   /* ---------- content ---------- */
   .content{ padding:16px 16px 90px; }
@@ -446,7 +445,6 @@
     cursor:default;
   }
   .celebrate-card.is-levelup{ background:linear-gradient(160deg, #8338ec, #118ab2 60%, #06d6a0); }
-  .celebrate-card.is-anniversary{ background:linear-gradient(160deg, #E8A33D, #D9536B 55%, #8338ec); }
   @keyframes celebrateCardPop{
     0%{ transform:scale(.4) translateY(30px); opacity:0; }
     60%{ transform:scale(1.08) translateY(-4px); opacity:1; }
@@ -480,7 +478,6 @@
     0%{ transform:scale(.5); opacity:0; }
     100%{ transform:scale(1); opacity:1; }
   }
-  .celebrate-sub{ font-size:12.5px; font-weight:600; color:rgba(255,255,255,.85); margin-top:6px; animation:celebrateXpPop .5s cubic-bezier(.17,.89,.32,1.28) .2s both; }
   .celebrate-btn{
     margin-top:20px; padding:12px 30px; border:none; border-radius:999px; cursor:pointer;
     background:#fff; color:#222; font-size:14px; font-weight:800; letter-spacing:.02em;
@@ -1111,75 +1108,12 @@ let incomingShares = []; // itens recebidos de outros usuários (só consulta)
 let sentShares = []; // itens que eu enviei
 let sharesLoaded = false;
 let sharesLoading = false;
-var MSG_NOTIF_STORAGE_KEY = 'tc_msg_notifications'; // local ao dispositivo, igual ao padrão de modo/tema
-let messageNotificationsEnabled = false;
-(function loadMessageNotifPref(){
-  try{ messageNotificationsEnabled = localStorage.getItem(MSG_NOTIF_STORAGE_KEY)==='1'; }catch(e){ messageNotificationsEnabled = false; }
-})();
-var notifiedMessageIds = {}; // ids já notificados nesta sessão, pra não repetir a notificação
-var MSG_NOTIF_POLL_MS = 45000; // intervalo de checagem por novas mensagens (só funciona com o app aberto — sem servidor de push)
-function toggleMessageNotifications(){
-  if(typeof Notification==='undefined') return; // navegador sem suporte — botão já vem desabilitado
-  if(messageNotificationsEnabled){
-    messageNotificationsEnabled = false;
-    try{ localStorage.setItem(MSG_NOTIF_STORAGE_KEY, '0'); }catch(e){}
-    render();
-    return;
-  }
-  if(Notification.permission==='granted'){
-    messageNotificationsEnabled = true;
-    try{ localStorage.setItem(MSG_NOTIF_STORAGE_KEY, '1'); }catch(e){}
-    render();
-  } else if(Notification.permission==='default'){
-    Notification.requestPermission().then(function(perm){
-      if(perm==='granted'){
-        messageNotificationsEnabled = true;
-        try{ localStorage.setItem(MSG_NOTIF_STORAGE_KEY, '1'); }catch(e){}
-      }
-      render();
-    });
-  }
-  // se já estiver 'denied', o botão fica desabilitado e nem chega aqui
-}
-// Verifica periodicamente por mensagens novas enquanto o app estiver aberto (foreground ou aba em segundo plano).
-// Não depende de servidor push — por isso só funciona com o navegador/PWA aberto neste dispositivo.
-setInterval(function(){
-  if(messageNotificationsEnabled && authUser && authUser.email && !sharesLoading){ loadShares(); }
-}, MSG_NOTIF_POLL_MS);
 let shareView = 'list'; // 'list' (lista de conversas) | 'thread' (conversa aberta)
 let shareRecordDraft = null; // { type, record, vehicleLabel } — o registro sendo anexado a um envio no momento
 let shareComposeEmail = '';
 let shareComposeError = '';
 let shareComposeAddingFriend = false; // formulário inline de "adicionar amigo" dentro da caixa de compartilhar
 let activeConversationEmail = null; // e-mail da conversa aberta na visão 'thread'
-var CHAT_LASTREAD_STORAGE_KEY = 'tc_chat_lastread'; // local ao dispositivo — igual ao padrão de modo/tema, não sincroniza na nuvem
-var chatLastRead = {}; // { email: epochSeconds } — último instante lido de cada conversa, neste dispositivo
-(function loadChatLastRead(){
-  try{ chatLastRead = JSON.parse(localStorage.getItem(CHAT_LASTREAD_STORAGE_KEY)) || {}; }catch(e){ chatLastRead = {}; }
-})();
-function saveChatLastRead(){ try{ localStorage.setItem(CHAT_LASTREAD_STORAGE_KEY, JSON.stringify(chatLastRead)); }catch(e){} }
-// Marca uma conversa como lida até a mensagem mais recente que ela tiver no momento.
-function markConversationRead(email){
-  if(!email) return;
-  var conversations = buildConversations();
-  var convo = conversations.filter(function(c){ return c.email===email; })[0];
-  var lastTs = (convo && convo.last && convo.last.createdAt && convo.last.createdAt.seconds) || Math.floor(Date.now()/1000);
-  chatLastRead[email] = lastTs;
-  saveChatLastRead();
-}
-// Uma conversa está "não lida" quando a última mensagem foi enviada pela outra pessoa
-// e seu horário é posterior ao último instante lido salvo localmente pra ela.
-function conversationHasUnread(conv, myEmail){
-  if(!conv || !conv.last) return false;
-  if(conv.last.fromEmail===myEmail) return false; // a última mensagem é minha — nada de novo pra eu ler
-  var lastTs = (conv.last.createdAt && conv.last.createdAt.seconds) || 0;
-  return lastTs > (chatLastRead[conv.email] || 0);
-}
-function hasAnyUnreadConversation(){
-  if(!authUser || !authUser.email) return false;
-  var myEmail = authUser.email.toLowerCase();
-  return buildConversations().some(function(c){ return conversationHasUnread(c, myEmail); });
-}
 let newConversationPromptOpen = false; // tela de "iniciar nova conversa" (só pede o e-mail)
 let friendFormEmail = ''; // e-mail no formulário de amigo (adicionar/editar)
 let friendFormName = ''; // nome no formulário de amigo (adicionar/editar)
@@ -1224,7 +1158,6 @@ function handleSignedIn(user){
     backfillMissions();
     checkPendingInvite();
     syncLeaderboardEntry(); // garante que a entrada do ranking existe/está atualizada mesmo se a pessoa só abrir o app sem salvar nada
-    checkVehicleAnniversaries(); // comemoração de aniversário de aquisição, uma vez por dia por veículo
     authError = '';
     render();
   }).catch(function(){
@@ -1232,31 +1165,8 @@ function handleSignedIn(user){
     backfillMissions();
     checkPendingInvite();
     syncLeaderboardEntry();
-    checkVehicleAnniversaries();
     render();
   });
-}
-var ANNIV_SHOWN_STORAGE_KEY = 'tc_anniv_shown'; // local ao dispositivo — { vehicleId: 'YYYY-MM-DD' já mostrado }
-// Verifica, uma vez por dia, se algum veículo cadastrado completa aniversário de aquisição hoje.
-// Comemorativo apenas — não concede XP (pra não confundir com uma missão real cumprida).
-function checkVehicleAnniversaries(){
-  if(!state.vehicles || !state.vehicles.length) return;
-  var today = new Date();
-  var todayStr = today.toISOString().slice(0,10);
-  var shown = {};
-  try{ shown = JSON.parse(localStorage.getItem(ANNIV_SHOWN_STORAGE_KEY)) || {}; }catch(e){ shown = {}; }
-  state.vehicles.forEach(function(v){
-    if(!v.acquisitionDate) return;
-    var acq = new Date(v.acquisitionDate+'T00:00:00');
-    if(isNaN(acq.getTime())) return;
-    if(acq.getDate()!==today.getDate() || acq.getMonth()!==today.getMonth()) return;
-    var years = today.getFullYear() - acq.getFullYear();
-    if(years <= 0) return; // é o próprio dia da aquisição neste ano — nada a comemorar ainda
-    if(shown[v.id]===todayStr) return; // já mostrado hoje pra este veículo
-    shown[v.id] = todayStr;
-    queueCelebration({ type:'aniversario', vehicleLabel: getVehicleLabel(v), years: years, acquisitionDate: v.acquisitionDate, icon:'car' });
-  });
-  try{ localStorage.setItem(ANNIV_SHOWN_STORAGE_KEY, JSON.stringify(shown)); }catch(e){}
 }
 let displayedOdo = null; // enquanto não-nulo, o cabeçalho mostra ESTE valor (o antigo) em vez do valor real,
                          // até o giro disparar — assim o odômetro nunca "pula" instantaneamente pro novo valor
@@ -2101,12 +2011,10 @@ function renderTabs(){
   var tabs = (appMode==='completo')
     ? allTabs
     : allTabs.filter(function(t){ return activeTabKeys().indexOf(t.key)!==-1; });
-  var showUnreadDot = hasAnyUnreadConversation();
   var html = '<div class="tabs">';
   tabs.forEach(function(t){
-    var dotHtml = (t.key==='compartilhamento' && showUnreadDot) ? '<span class="tab-unread-dot"></span>' : '';
     html += '<button class="tab-btn '+(state.tab===t.key?'active':'')+'" data-action="set-tab" data-tab="'+t.key+'" aria-label="'+esc(t.label)+'">'+
-      icon(t.ic,18, state.tab===t.key ? t.color : 'var(--dim)') + dotHtml + '</button>';
+      icon(t.ic,18, state.tab===t.key ? t.color : 'var(--dim)')+'</button>';
   });
   html += '</div>';
   return html;
@@ -2129,9 +2037,6 @@ function renderContent(stats, dashboardStats){
 /* ---------- conversa entre usuários: registros compartilhados (só consulta) + mensagens de texto ---------- */
 function loadShares(){
   if(!authUser || !authUser.email || !window.__fb) return;
-  var wasLoaded = sharesLoaded; // se já tínhamos carregado antes — só notifica em recargas, nunca na primeira carga
-  var prevIds = {};
-  incomingShares.forEach(function(s){ if(s.id) prevIds[s.id] = true; });
   sharesLoading = true;
   render();
   var email = authUser.email.toLowerCase();
@@ -2142,28 +2047,9 @@ function loadShares(){
       sharesLoading = false;
       sharesLoaded = true;
       processFriendAddShares(); // adiciona automaticamente quem me convidou por link (se ainda não for meu amigo)
-      if(wasLoaded) notifyNewIncomingMessages(prevIds, email);
       render();
     })
     .catch(function(){ sharesLoading = false; sharesLoaded = true; render(); });
-}
-// Compara a lista recém-carregada com a anterior e dispara notificação do navegador
-// para mensagens de texto novas vindas de outra pessoa — pula se a própria conversa já está aberta na tela.
-function notifyNewIncomingMessages(prevIds, myEmail){
-  if(!messageNotificationsEnabled || typeof Notification==='undefined' || Notification.permission!=='granted') return;
-  var viewingThreadEmail = (document.visibilityState==='visible' && state.tab==='compartilhamento' && shareView==='thread') ? activeConversationEmail : null;
-  incomingShares.forEach(function(s){
-    if(s.kind!=='message' || prevIds[s.id] || notifiedMessageIds[s.id]) return;
-    if(s.fromEmail===viewingThreadEmail) return; // usuário já está vendo essa conversa na tela
-    notifiedMessageIds[s.id] = true;
-    try{
-      new Notification(contactDisplayName(s.fromEmail) || s.fromEmail, {
-        body: s.text || 'Nova mensagem',
-        icon: 'icon-192.png',
-        tag: 'tc-msg-'+s.fromEmail
-      });
-    }catch(e){ /* navegador pode bloquear silenciosamente — ignora */ }
-  });
 }
 // Processa convites recebidos por link (shares do tipo "friend-add"): se quem me convidou ainda não
 // está nos meus contatos, adiciona automaticamente — assim a amizade fica de mão dupla sem esforço extra.
@@ -2560,7 +2446,6 @@ function submitShareRecord(){
     shareRecordDraft = null;
     activeConversationEmail = email;
     shareView = 'thread';
-    markConversationRead(email);
     loadShares();
   }).catch(function(){
     shareComposeError = 'Não foi possível enviar agora. Verifique sua conexão e tente de novo.';
@@ -2595,7 +2480,6 @@ function confirmNewConversation(){
   modal = null;
   activeConversationEmail = email;
   shareView = 'thread';
-  markConversationRead(email);
   render();
 }
 function conversationCounterpart(share, myEmail){
@@ -2784,10 +2668,9 @@ function renderShareTab(){
   }
   html += '<div class="list">';
   conversations.forEach(function(c){
-    var unread = conversationHasUnread(c, myEmail);
     html += '<div class="card" data-action="open-conversation" data-email="'+esc(c.email)+'" style="cursor:pointer;">' +
       '<div class="card-main">' +
-        '<div class="card-title">'+(unread ? '<span style="display:inline-block; width:8px; height:8px; border-radius:999px; background:var(--red); margin-right:6px; vertical-align:1px;"></span>' : '')+esc(contactDisplayName(c.email))+'</div>' +
+        '<div class="card-title">'+esc(contactDisplayName(c.email))+'</div>' +
         (getContactName(c.email) ? '<div class="card-meta" style="margin-top:2px;"><span>'+esc(c.email)+'</span></div>' : '') +
         '<div class="card-meta"><span>'+esc(conversationPreview(c.last))+'</span></div>' +
       '</div>' +
@@ -3703,13 +3586,6 @@ function renderSettingsModal(){
       '<span style="font-size:12.5px; color:var(--muted);">Marcador de nível ao abastecer. Desativar também remove o card "Último km/l"</span>' +
       '<button class="odo-quick-btn" data-action="toggle-fuel-gauge" style="flex:none;">'+(state.fuelGaugeEnabled!==false ? 'Ativado' : 'Desativado')+'</button>' +
     '</div>';
-  var notifStatus = (typeof Notification==='undefined') ? 'unsupported' : Notification.permission; // 'granted' | 'denied' | 'default' | 'unsupported'
-  var notifLabel = notifStatus==='granted' ? 'Ativado' : (notifStatus==='denied' ? 'Bloqueado no navegador' : (notifStatus==='unsupported' ? 'Indisponível' : 'Ativar'));
-  html += '<span class="field-label" style="display:block; margin:22px 0 6px;">Notificações de novas mensagens</span>' +
-    '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:10px 12px;">' +
-      '<span style="font-size:12.5px; color:var(--muted);">Avisar quando chegar mensagem de amigos na Conversa'+(notifStatus==='denied'?' — permissão negada no navegador, ative manualmente nas configurações do site':'')+'</span>' +
-      '<button class="odo-quick-btn" data-action="toggle-message-notifications" style="flex:none;" '+(notifStatus==='unsupported'||notifStatus==='denied'?'disabled':'')+'>'+notifLabel+'</button>' +
-    '</div>';
   html += '<span class="field-label" style="display:block; margin:22px 0 6px;">Conta</span>' +
     '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:10px 12px;">' +
       '<span style="font-size:12.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc((authUser && (authUser.email||authUser.displayName)) || '')+'</span>' +
@@ -3781,28 +3657,19 @@ function renderCapacityWarning(){
 function renderCelebration(){
   var e = activeCelebration;
   var isLevelUp = e.type === 'levelup';
-  var isAnniversary = e.type === 'aniversario';
   var confettiHtml = e.confetti.map(function(c){
     return '<span class="confetti-piece" style="left:'+c.left+'%; background:'+c.color+'; animation-delay:'+c.delay+'s; animation-duration:'+c.duration+'s; --rot:'+c.rotate+'deg; --drift:'+c.drift+'px;"></span>';
   }).join('');
-  var headline = isLevelUp ? 'SUBIU DE NÍVEL!' : (isAnniversary ? 'ANIVERSÁRIO DO VEÍCULO!' : 'CONQUISTA ALCANÇADA!');
+  var headline = isLevelUp ? 'SUBIU DE NÍVEL!' : 'CONQUISTA ALCANÇADA!';
   var levelTier = isLevelUp ? getLevelTier(e.level) : null;
-  var body;
-  if(isLevelUp){
-    body = '<div class="celebrate-level">Nível '+e.level+'</div><div class="celebrate-tier">'+esc(levelTier.name)+'</div>';
-  } else if(isAnniversary){
-    body = '<div class="celebrate-mission">'+icon(e.icon,22,'#fff')+'<span>'+esc(e.vehicleLabel)+'</span></div>' +
-      '<div class="celebrate-xp">'+e.years+(e.years===1?' ano':' anos')+' com você</div>' +
-      '<div class="celebrate-sub">Adquirido em '+formatDate(e.acquisitionDate)+'</div>';
-  } else {
-    body = '<div class="celebrate-mission">'+icon(e.icon,22,'#fff')+'<span>'+esc(e.title)+'</span></div>' +
+  var body = isLevelUp
+    ? '<div class="celebrate-level">Nível '+e.level+'</div><div class="celebrate-tier">'+esc(levelTier.name)+'</div>'
+    : '<div class="celebrate-mission">'+icon(e.icon,22,'#fff')+'<span>'+esc(e.title)+'</span></div>' +
       '<div class="celebrate-xp">+'+e.xp+' XP</div>';
-  }
   var cardStyle = isLevelUp ? ' style="background:'+levelTier.gradient+'"' : '';
-  var cardClass = isLevelUp ? 'is-levelup' : (isAnniversary ? 'is-anniversary' : '');
   return '<div class="celebrate-overlay">' +
     '<div class="confetti-layer">'+confettiHtml+'</div>' +
-    '<div class="celebrate-card '+cardClass+'"'+cardStyle+'>' +
+    '<div class="celebrate-card '+(isLevelUp?'is-levelup':'')+'"'+cardStyle+'>' +
       '<div class="celebrate-burst"></div>' +
       '<div class="celebrate-headline">'+headline+'</div>' +
       body +
@@ -3902,7 +3769,6 @@ function attachEvents(){
         state.tabSoundEnabled = (state.tabSoundEnabled===false);
         persist();
       }
-      else if(action==='toggle-message-notifications'){ toggleMessageNotifications(); }
       else if(action==='toggle-fuel-gauge'){
         state.fuelGaugeEnabled = (state.fuelGaugeEnabled===false);
         persist();
@@ -3984,7 +3850,6 @@ function attachEvents(){
       else if(action==='open-conversation'){
         activeConversationEmail = el.getAttribute('data-email');
         shareView = 'thread';
-        markConversationRead(activeConversationEmail);
         render();
       }
       else if(action==='back-to-share-list'){
@@ -4158,6 +4023,7 @@ function attachEvents(){
         var isPending = addMaintenance({ date:date, description:description, cost:cost, odometer:parseKmValue(odo), address:address, notes:notes, warrantyMonths:warrantyMonths }, editingMaintenanceId);
         var geoM = geoCoordsForAddress(address);
         saveLocationIfNew('manutencao', address, addressName, geoM ? geoM.lat : null, geoM ? geoM.lng : null);
+        persist(); // garante que o nome do local (atualizado após o addMaintenance já ter persistido) não se perca
         triggerOdoRoll();
         if(isPending) render(); else closeModal();
       }
@@ -4176,6 +4042,7 @@ function attachEvents(){
         addOccurrence({ date:odate, description:odescription, cost:ocost, odometer: oodo ? parseKmValue(oodo) : null, address:oaddress, notes:onotes }, editingOccurrenceId);
         var geoO = geoCoordsForAddress(oaddress);
         saveLocationIfNew('ocorrencia', oaddress, oaddressName, geoO ? geoO.lat : null, geoO ? geoO.lng : null);
+        persist(); // garante que o nome do local (atualizado após o addOccurrence já ter persistido) não se perca
         if(oodo) triggerOdoRoll();
         closeModal();
       }
@@ -4213,6 +4080,7 @@ function attachEvents(){
         var isPending2 = addFuel(fuelEntry, editingFuelId);
         var geoF = geoCoordsForAddress(address2);
         saveLocationIfNew('combustivel', address2, addressName2, geoF ? geoF.lat : null, geoF ? geoF.lng : null);
+        persist(); // garante que o nome do local (atualizado após o addFuel já ter persistido) não se perca
         triggerOdoRoll();
         if(isPending2) render(); else closeModal();
       }
