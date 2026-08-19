@@ -980,7 +980,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev61'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev62'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -3123,6 +3123,10 @@ function renderDashboard(stats){
         '<div class="ov-head"><span>Custo total</span></div>' +
         '<div class="ov-val">'+formatBRL(stats.totalAllCosts)+'</div>' +
         '<div class="ov-sub">manutenção + combustível + ocorrências</div>' +
+      '</div>' +
+      '<div class="ov-card">' +
+        '<div class="ov-head">'+icon('fuel',11,'var(--teal)')+'<span>Custo com combustível</span></div>' +
+        '<div class="ov-val">'+formatBRL(stats.totalCombustivel)+'</div>' +
       '</div>' +
       '<div class="ov-card">' +
         '<div class="ov-head"><span>Custo por km</span></div>' +
