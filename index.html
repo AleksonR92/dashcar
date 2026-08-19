@@ -980,7 +980,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev62'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev63'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -3094,7 +3094,6 @@ function renderDashboard(stats){
   '</div>';
 
   // ---- Visão geral: dados que antes viviam soltos no cabeçalho (km total, média km/dia, custos médios etc.) ----
-  var costPerDay = stats.costPerMonth!=null ? stats.costPerMonth/30 : null;
   var costPerKm = (stats.totalKmTraveled>0) ? (stats.totalAllCosts/stats.totalKmTraveled) : null;
   html += '<div>' +
     '<h3>Visão geral do veículo'+((dashFilterStart||dashFilterEnd) ? ' (período filtrado)' : '')+'</h3>' +
@@ -3135,10 +3134,6 @@ function renderDashboard(stats){
       '<div class="ov-card">' +
         '<div class="ov-head"><span>Média R$/mês</span></div>' +
         '<div class="ov-val">'+(stats.costPerMonth!=null ? formatBRL(stats.costPerMonth) : '—')+'</div>' +
-      '</div>' +
-      '<div class="ov-card">' +
-        '<div class="ov-head"><span>Média R$/dia</span></div>' +
-        '<div class="ov-val">'+(costPerDay!=null ? formatBRL(costPerDay) : '—')+'</div>' +
       '</div>' +
     '</div>' +
   '</div>';
