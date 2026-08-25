@@ -505,9 +505,10 @@
 <script>
 /* ---------- constants ---------- */
 const FUEL_TYPES = ['Gasolina','Aditivada','Etanol','Diesel','GNV'];
-const SERVICE_TYPES_ROTINA = ['Calibragem de pneu','Verificar nível de óleo','Verificar nível do fluido de arrefecimento','Limpeza'];
+const SERVICE_TYPES_ROTINA = ['Calibragem de pneu','Verificar nível de óleo','Verificar nível do fluido de arrefecimento','Limpeza','Verificação de luzes'];
 const SERVICE_TYPES_PERIODICO = ['Troca de óleo e filtro','Troca de correia','Troca de cabo de vela','Ar condicionado','Troca de filtro do ar condicionado','Troca de embreagem','Troca de bateria','Troca do disco de freio','Troca da pastilha de freio','Alinhamento e Balanceamento','Troca do pneu'];
 const SERVICE_TYPES = SERVICE_TYPES_ROTINA.concat(SERVICE_TYPES_PERIODICO).concat(['Outro']);
+const ROTINA_FORM_TYPES = SERVICE_TYPES_ROTINA.concat(['Outro']);
 // Intervalos padrão (km) de senso comum, usados para pré-preencher e disparar os alertas de manutenção
 const DEFAULT_MAINTENANCE_INTERVALS = {
   'Troca de óleo e filtro': 5000,
@@ -555,16 +556,16 @@ const MISSIONS = [
     matches:function(rec, type){ return false; } },
   { id:'calibragem-pneu', title:'Calibragem dos pneus', icon:'gauge', xp:20,
     recurrence:{type:'days', value:7},
-    matches:function(rec, type){ return type==='manutencao' && rec.description==='Calibragem de pneu'; } },
+    matches:function(rec, type){ return type==='rotina' && rec.description==='Calibragem de pneu'; } },
   { id:'nivel-oleo', title:'Nível do óleo', icon:'droplet', xp:20,
     recurrence:{type:'days', value:7},
-    matches:function(rec, type){ return type==='manutencao' && rec.description==='Verificar nível de óleo'; } },
+    matches:function(rec, type){ return type==='rotina' && rec.description==='Verificar nível de óleo'; } },
   { id:'fluido-arrefecimento', title:'Fluido de arrefecimento', icon:'droplet', xp:15,
     recurrence:{type:'days', value:7},
-    matches:function(rec, type){ return type==='manutencao' && rec.description==='Verificar nível do fluido de arrefecimento'; } },
+    matches:function(rec, type){ return type==='rotina' && rec.description==='Verificar nível do fluido de arrefecimento'; } },
   { id:'limpeza', title:'Limpeza', icon:'car', xp:10,
     recurrence:{type:'days', value:30},
-    matches:function(rec, type){ return type==='manutencao' && rec.description==='Limpeza'; } },
+    matches:function(rec, type){ return type==='rotina' && rec.description==='Limpeza'; } },
   { id:'abastecimento-aditivada', title:'Abastecimento com aditivada', icon:'fuel', xp:15,
     recurrence:{type:'days', value:30},
     matches:function(rec, type){ return type==='combustivel' && rec.fuelType==='Aditivada'; } },
@@ -791,6 +792,7 @@ function evaluateMissionsForRecord(record, recordType){
 }
 function getRecordsForType(vehicleId, type){
   if(type==='manutencao') return state.maintenance.filter(function(m){return m.vehicleId===vehicleId;});
+  if(type==='rotina') return state.routine.filter(function(r){return r.vehicleId===vehicleId;});
   if(type==='combustivel') return state.fuel.filter(function(f){return f.vehicleId===vehicleId;});
   if(type==='ocorrencia') return state.occurrences.filter(function(o){return o.vehicleId===vehicleId;});
   if(type==='percurso') return (state.percursos||[]).filter(function(p){return p.vehicleId===vehicleId;});
@@ -807,7 +809,7 @@ function backfillMissions(){
     MISSIONS.forEach(function(mission){
       if(mission.trigger==='navigation') return; // não depende de nenhum registro
       var matchingRecords = [];
-      ['manutencao','combustivel','ocorrencia','percurso'].forEach(function(type){
+      ['manutencao','rotina','combustivel','ocorrencia','percurso'].forEach(function(type){
         getRecordsForType(v.id, type).forEach(function(r){
           if(mission.matches(r, type)) matchingRecords.push(r);
         });
@@ -934,6 +936,7 @@ function periodLabel(mission){
 }
 function computeMissionStatus(mission, vehicleId){
   var records = state.maintenance.filter(function(m){return m.vehicleId===vehicleId;}).map(function(m){return {rec:m, type:'manutencao'};})
+    .concat(state.routine.filter(function(r){return r.vehicleId===vehicleId;}).map(function(r){return {rec:r, type:'rotina'};}))
     .concat(state.fuel.filter(function(f){return f.vehicleId===vehicleId;}).map(function(f){return {rec:f, type:'combustivel'};}))
     .concat(state.occurrences.filter(function(o){return o.vehicleId===vehicleId;}).map(function(o){return {rec:o, type:'ocorrencia'};}))
     .concat((state.percursos||[]).filter(function(p){return p.vehicleId===vehicleId;}).map(function(p){return {rec:p, type:'percurso'};}));
@@ -980,7 +983,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev63'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev64'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1080,6 +1083,7 @@ function icon(name, size, color, extra){
 /* ---------- state ---------- */
 let state = {
   maintenance: [],
+  routine: [],
   fuel: [],
   occurrences: [],
   vehicles: [], // { id, plate, brand, model, color }
@@ -1091,7 +1095,7 @@ let state = {
   importMsg: '',
   pending: null,
   gamification: { xp: 0, completions: {} }, // completions: { 'missionId|vehicleId|periodKey': {date, xp} }
-  locations: { manutencao: [], combustivel: [], ocorrencia: [] }, // locais salvos por tema: { id, name, address }
+  locations: { manutencao: [], rotina: [], combustivel: [], ocorrencia: [] }, // locais salvos por tema: { id, name, address }
   odometerLogs: [], // atualizações avulsas de odômetro, independentes de manutenção/abastecimento/ocorrência: { id, vehicleId, date, odometer }
   tabSoundEnabled: true, // som de ferramenta ao navegar pra aba de Manutenção
   fuelGaugeEnabled: true, // exibir o marcador de nível de combustível ao abastecer; desativado também remove o card "Último km/l"
@@ -1138,6 +1142,7 @@ let fuelGaugeFraction = 0.5; // 0 (E) .. 1 (F), current pointer value while the 
 let vehiclePhotoDraft = null; // base64 data URL of the vehicle photo being edited, null = none
 let editingFuelId = null; // null = creating a new fuel entry, otherwise the id being edited
 let editingMaintenanceId = null; // null = creating a new maintenance entry, otherwise the id being edited
+let editingRoutineId = null; // null = creating a new routine entry, otherwise the id being edited
 let editingOccurrenceId = null; // null = creating a new occurrence, otherwise the id being edited
 let awaitingAddressPaste = false; // true right after "find-address-maps" opens Google Maps, until the user returns to the app
 let capacityWarning = null; // { volBefore, volAfter, capacity, excess } when liters exceed tank capacity
@@ -1301,7 +1306,7 @@ function geoCoordsForAddress(address){
   return (lastGeoAddress && lastGeoAddress === address && lastGeoCoords) ? lastGeoCoords : null;
 }
 function saveLocationIfNew(category, address, name, lat, lng){
-  if(!state.locations) state.locations = { manutencao:[], combustivel:[], ocorrencia:[] };
+  if(!state.locations) state.locations = { manutencao:[], rotina:[], combustivel:[], ocorrencia:[] };
   if(!state.locations[category]) state.locations[category] = [];
   var addr = (address||'').trim();
   if(!addr) return;
@@ -1439,6 +1444,7 @@ function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, function(c){ 
 function applyLoadedData(parsed){
   parsed = parsed || {};
   state.maintenance = parsed.maintenance || [];
+  state.routine = Array.isArray(parsed.routine) ? parsed.routine : [];
   state.fuel = parsed.fuel || [];
   state.occurrences = parsed.occurrences || [];
   state.maintenanceIntervals = parsed.maintenanceIntervals || {};
@@ -1448,6 +1454,7 @@ function applyLoadedData(parsed){
   var loadedLocations = (parsed.locations && typeof parsed.locations==='object') ? parsed.locations : {};
   state.locations = {
     manutencao: Array.isArray(loadedLocations.manutencao) ? loadedLocations.manutencao : [],
+    rotina: Array.isArray(loadedLocations.rotina) ? loadedLocations.rotina : [],
     combustivel: Array.isArray(loadedLocations.combustivel) ? loadedLocations.combustivel : [],
     ocorrencia: Array.isArray(loadedLocations.ocorrencia) ? loadedLocations.ocorrencia : []
   };
@@ -1467,6 +1474,20 @@ function applyLoadedData(parsed){
     state.maintenance.forEach(function(m){ if(!m.vehicleId) m.vehicleId = legacyId; });
     state.fuel.forEach(function(f){ if(!f.vehicleId) f.vehicleId = legacyId; });
   }
+  // migração rev64: itens de rotina que ainda estejam salvos junto da manutenção geral
+  // (formato de versões anteriores) são movidos para o novo array state.routine
+  if(state.maintenance.length){
+    var migratedRoutine = [];
+    var remainingMaintenance = [];
+    state.maintenance.forEach(function(m){
+      if(SERVICE_TYPES_ROTINA.indexOf(m.description) !== -1){ migratedRoutine.push(m); }
+      else { remainingMaintenance.push(m); }
+    });
+    if(migratedRoutine.length){
+      state.routine = state.routine.concat(migratedRoutine);
+      state.maintenance = remainingMaintenance;
+    }
+  }
   applyDefaultMaintenanceIntervals();
 }
 function load(){
@@ -1477,7 +1498,7 @@ function load(){
   }catch(e){ applyDefaultMaintenanceIntervals(); /* start empty */ }
 }
 function buildSyncPayload(){
-  return { maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations, odometerLogs: state.odometerLogs, tabSoundEnabled: state.tabSoundEnabled, fuelGaugeEnabled: state.fuelGaugeEnabled, percursos: state.percursos, contacts: state.contacts };
+  return { maintenance: state.maintenance, routine: state.routine, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations, odometerLogs: state.odometerLogs, tabSoundEnabled: state.tabSoundEnabled, fuelGaugeEnabled: state.fuelGaugeEnabled, percursos: state.percursos, contacts: state.contacts };
 }
 function persistToCloud(){
   if(!authUser || !window.__fb) return;
@@ -1534,18 +1555,21 @@ function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
   var vehicle = state.vehicles.find(function(v){ return v.id===vehicleId; });
   var vehicleCapacity = vehicle ? vehicle.tankCapacity : DEFAULT_TANK_CAPACITY;
   var maint = state.maintenance.filter(function(m){ return m.vehicleId === vehicleId; });
+  var routineList = state.routine.filter(function(r){ return r.vehicleId === vehicleId; });
   var fuelList = state.fuel.filter(function(f){ return f.vehicleId === vehicleId; });
   var occList = state.occurrences.filter(function(o){ return o.vehicleId === vehicleId; });
-  if(dateStart){ maint = maint.filter(function(m){return m.date>=dateStart;}); fuelList = fuelList.filter(function(f){return f.date>=dateStart;}); occList = occList.filter(function(o){return o.date>=dateStart;}); }
-  if(dateEnd){ maint = maint.filter(function(m){return m.date<=dateEnd;}); fuelList = fuelList.filter(function(f){return f.date<=dateEnd;}); occList = occList.filter(function(o){return o.date<=dateEnd;}); }
+  if(dateStart){ maint = maint.filter(function(m){return m.date>=dateStart;}); routineList = routineList.filter(function(r){return r.date>=dateStart;}); fuelList = fuelList.filter(function(f){return f.date>=dateStart;}); occList = occList.filter(function(o){return o.date>=dateStart;}); }
+  if(dateEnd){ maint = maint.filter(function(m){return m.date<=dateEnd;}); routineList = routineList.filter(function(r){return r.date<=dateEnd;}); fuelList = fuelList.filter(function(f){return f.date<=dateEnd;}); occList = occList.filter(function(o){return o.date<=dateEnd;}); }
 
   var odoLogList = (state.odometerLogs||[]).filter(function(o){ return o.vehicleId === vehicleId; });
   if(dateStart){ odoLogList = odoLogList.filter(function(o){return o.date>=dateStart;}); }
   if(dateEnd){ odoLogList = odoLogList.filter(function(o){return o.date<=dateEnd;}); }
 
   var totalManutencao = maint.reduce(function(s,m){return s+Number(m.cost||0);},0);
+  var totalRotina = routineList.reduce(function(s,r){return s+Number(r.cost||0);},0);
   var totalCombustivel = fuelList.reduce(function(s,f){return s+Number(f.cost||0);},0);
   var allOdo = maint.map(function(m){return Number(m.odometer);})
+    .concat(routineList.map(function(r){return Number(r.odometer);}))
     .concat(fuelList.map(function(f){return Number(f.odometer);}))
     .concat(odoLogList.map(function(o){return Number(o.odometer);}))
     .filter(function(n){return !isNaN(n);});
@@ -1559,7 +1583,7 @@ function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
     totalKmTraveled = allOdo.length>=2 ? (Math.max.apply(null, allOdo) - Math.min.apply(null, allOdo)) : 0;
   }
 
-  var recordsWithOdo = maint.concat(fuelList).filter(function(r){ return r.date && !isNaN(Number(r.odometer)); });
+  var recordsWithOdo = maint.concat(routineList).concat(fuelList).filter(function(r){ return r.date && !isNaN(Number(r.odometer)); });
   var firstRecord = recordsWithOdo.length ? recordsWithOdo.reduce(function(earliest,r){ return (!earliest || r.date<earliest.date) ? r : earliest; }, null) : null;
   var avgKmPerDay = null;
   if(firstRecord){
@@ -1588,6 +1612,7 @@ function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
   var lastKml = consumptionTrend.length ? consumptionTrend[consumptionTrend.length-1].kml : null;
 
   var allDatesForDays = maint.map(function(m){return m.date;})
+    .concat(routineList.map(function(r){return r.date;}))
     .concat(fuelList.map(function(f){return f.date;}))
     .concat(occList.map(function(o){return o.date;}))
     .filter(Boolean);
@@ -1614,7 +1639,7 @@ function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
   occList.forEach(function(o){ var k=o.description||'Outro'; occMap[k]=(occMap[k]||0)+1; });
   var occurrenceBreakdown = Object.keys(occMap).map(function(name){return {name:name, value:occMap[name]};});
 
-  var totalAllCosts = Number(totalManutencao||0) + Number(totalCombustivel||0) + Number(totalCustoOcorrencias||0);
+  var totalAllCosts = Number(totalManutencao||0) + Number(totalRotina||0) + Number(totalCombustivel||0) + Number(totalCustoOcorrencias||0);
   var costPerMonth = (totalDaysUsed && totalDaysUsed>0) ? (totalAllCosts/totalDaysUsed)*30 : null;
 
   // ---- mês atual: usado no cabeçalho (só faz sentido na chamada sem filtro de período, que é o caso de computeStats()) ----
@@ -1623,8 +1648,10 @@ function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
   var monthKeyNow = nowDate.getFullYear()+'-'+String(nowDate.getMonth()+1).padStart(2,'0');
   var monthStartStr = monthKeyNow+'-01';
   var monthManutencao = maint.filter(function(m){ return (m.date||'').slice(0,7)===monthKeyNow; }).reduce(function(s,m){return s+Number(m.cost||0);},0);
+  var monthRotina = routineList.filter(function(r){ return (r.date||'').slice(0,7)===monthKeyNow; }).reduce(function(s,r){return s+Number(r.cost||0);},0);
   var monthCombustivel = fuelList.filter(function(f){ return (f.date||'').slice(0,7)===monthKeyNow; }).reduce(function(s,f){return s+Number(f.cost||0);},0);
   var beforeMonthOdo = maint.filter(function(m){return m.date && m.date<monthStartStr && !isNaN(Number(m.odometer));}).map(function(m){return Number(m.odometer);})
+    .concat(routineList.filter(function(r){return r.date && r.date<monthStartStr && !isNaN(Number(r.odometer));}).map(function(r){return Number(r.odometer);}))
     .concat(fuelList.filter(function(f){return f.date && f.date<monthStartStr && !isNaN(Number(f.odometer));}).map(function(f){return Number(f.odometer);}))
     .concat(odoLogList.filter(function(o){return o.date && o.date<monthStartStr && !isNaN(Number(o.odometer));}).map(function(o){return Number(o.odometer);}));
   if(initOdo!=null && (!vehicle || !vehicle.acquisitionDate || vehicle.acquisitionDate<monthStartStr)){ beforeMonthOdo.push(initOdo); }
@@ -1632,7 +1659,7 @@ function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
   var monthLabelRaw = MESES_PT[nowDate.getMonth()]+' '+nowDate.getFullYear();
   var monthLabel = monthLabelRaw.charAt(0).toUpperCase()+monthLabelRaw.slice(1);
 
-  return { totalManutencao:totalManutencao, totalCombustivel:totalCombustivel, currentOdo:currentOdo, totalKmTraveled:totalKmTraveled, avgKmPerDay:avgKmPerDay, avgConsumo:avgConsumo, lastKml:lastKml, monthly:monthly, serviceBreakdown:serviceBreakdown, consumptionTrend:consumptionTrend, totalOcorrencias:totalOcorrencias, totalCustoOcorrencias:totalCustoOcorrencias, occurrenceBreakdown:occurrenceBreakdown, totalDaysUsed:totalDaysUsed, costPerMonth:costPerMonth, kmThisMonth:kmThisMonth, monthManutencao:monthManutencao, monthCombustivel:monthCombustivel, monthLabel:monthLabel, totalAllCosts:totalAllCosts };
+  return { totalManutencao:totalManutencao, totalRotina:totalRotina, totalCombustivel:totalCombustivel, currentOdo:currentOdo, totalKmTraveled:totalKmTraveled, avgKmPerDay:avgKmPerDay, avgConsumo:avgConsumo, lastKml:lastKml, monthly:monthly, serviceBreakdown:serviceBreakdown, consumptionTrend:consumptionTrend, totalOcorrencias:totalOcorrencias, totalCustoOcorrencias:totalCustoOcorrencias, occurrenceBreakdown:occurrenceBreakdown, totalDaysUsed:totalDaysUsed, costPerMonth:costPerMonth, kmThisMonth:kmThisMonth, monthManutencao:monthManutencao, monthRotina:monthRotina, monthCombustivel:monthCombustivel, monthLabel:monthLabel, totalAllCosts:totalAllCosts };
 }
 
 function computeStats(){
@@ -1648,8 +1675,9 @@ function computeAllVehiclesSummary(dateStart, dateEnd){
       plate: v.plate,
       currentOdo: s.currentOdo,
       totalManutencao: s.totalManutencao,
+      totalRotina: s.totalRotina,
       totalCombustivel: s.totalCombustivel,
-      total: s.totalManutencao + s.totalCombustivel,
+      total: s.totalManutencao + s.totalRotina + s.totalCombustivel,
       avgConsumo: s.avgConsumo,
       lastKml: s.lastKml,
       totalOcorrencias: s.totalOcorrencias,
@@ -1660,6 +1688,7 @@ function computeAllVehiclesSummary(dateStart, dateEnd){
 
 function getLastRecord(vehicleId, excludeId){
   var all = state.maintenance.filter(function(m){return m.vehicleId===vehicleId && m.id!==excludeId;})
+    .concat(state.routine.filter(function(r){return r.vehicleId===vehicleId && r.id!==excludeId;}))
     .concat(state.fuel.filter(function(f){return f.vehicleId===vehicleId && f.id!==excludeId;}));
   if(all.length===0) return null;
   return all.reduce(function(latest,r){ return (!latest || r.date>latest.date) ? r : latest; }, null);
@@ -1698,6 +1727,20 @@ function commitMaintenance(entry, editId){
   evaluateMissionsForRecord(finalRecord, 'manutencao');
   persist();
 }
+function commitRoutine(entry, editId){
+  var finalRecord;
+  if(editId){
+    state.routine = state.routine.map(function(r){
+      if(r.id===editId){ finalRecord = Object.assign({}, entry, {id:editId, vehicleId:r.vehicleId}); return finalRecord; }
+      return r;
+    }).sort(function(a,b){return a.date<b.date?1:-1;});
+  } else {
+    finalRecord = Object.assign({}, entry, {id:uid(), vehicleId: state.activeVehicleId});
+    state.routine = state.routine.concat([finalRecord]).sort(function(a,b){return a.date<b.date?1:-1;});
+  }
+  evaluateMissionsForRecord(finalRecord, 'rotina');
+  persist();
+}
 function commitFuel(entry, editId){
   var finalRecord;
   if(editId){
@@ -1718,6 +1761,12 @@ function addMaintenance(entry, editId){
   commitMaintenance(entry, editId);
   return false;
 }
+function addRoutine(entry, editId){
+  var issues = violatesSequence(entry, editId);
+  if(issues){ state.pending = {kind:'rotina', entry:entry, issues:issues, editId:editId}; formPrefill = entry; return true; }
+  commitRoutine(entry, editId);
+  return false;
+}
 function addFuel(entry, editId){
   var issues = violatesSequence(entry, editId);
   if(issues){ state.pending = {kind:'abastecimento', entry:entry, issues:issues, editId:editId}; formPrefill = entry; return true; }
@@ -1727,18 +1776,26 @@ function addFuel(entry, editId){
 function confirmPending(){
   if(!state.pending) return;
   if(state.pending.kind==='manutencao') commitMaintenance(state.pending.entry, state.pending.editId);
+  else if(state.pending.kind==='rotina') commitRoutine(state.pending.entry, state.pending.editId);
   else commitFuel(state.pending.entry, state.pending.editId);
   state.pending = null;
   formPrefill = null;
   modal = null;
   editingFuelId = null;
   editingMaintenanceId = null;
+  editingRoutineId = null;
 }
 function cancelPending(){ state.pending = null; render(); }
 function removeMaintenance(id){
   var removed = state.maintenance.find(function(m){return m.id===id;});
   state.maintenance = state.maintenance.filter(function(m){return m.id!==id;});
   if(removed) revokeMissionsForRecord(removed, 'manutencao');
+  persist();
+}
+function removeRoutine(id){
+  var removed = state.routine.find(function(r){return r.id===id;});
+  state.routine = state.routine.filter(function(r){return r.id!==id;});
+  if(removed) revokeMissionsForRecord(removed, 'rotina');
   persist();
 }
 function removeFuel(id){
@@ -1783,6 +1840,7 @@ function updateVehicle(id, v){
 function deleteVehicle(id){
   state.vehicles = state.vehicles.filter(function(v){ return v.id!==id; });
   state.maintenance = state.maintenance.filter(function(m){ return m.vehicleId!==id; });
+  state.routine = state.routine.filter(function(r){ return r.vehicleId!==id; });
   state.fuel = state.fuel.filter(function(f){ return f.vehicleId!==id; });
   state.occurrences = state.occurrences.filter(function(o){ return o.vehicleId!==id; });
   if(state.activeVehicleId === id){
@@ -1799,7 +1857,7 @@ function selectVehicle(id){
 function exportData(){
   var payload = {
     appData:'controle-veiculo', version:DATA_VERSION, exportedAt:new Date().toISOString(),
-    vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenance: state.maintenance, fuel: state.fuel, occurrences: state.occurrences, locations: state.locations, odometerLogs: state.odometerLogs
+    vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenance: state.maintenance, routine: state.routine, fuel: state.fuel, occurrences: state.occurrences, locations: state.locations, odometerLogs: state.odometerLogs
   };
   var blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
   var url = URL.createObjectURL(blob);
@@ -1824,11 +1882,13 @@ function handleImportFile(e){
         render(); return;
       }
       state.maintenance = parsed.maintenance.map(function(m){ return Object.assign({}, m, {id:m.id||uid()}); });
+      state.routine = Array.isArray(parsed.routine) ? parsed.routine.map(function(r){ return Object.assign({}, r, {id:r.id||uid()}); }) : [];
       state.fuel = parsed.fuel.map(function(f){ return Object.assign({}, f, {id:f.id||uid()}); });
       state.occurrences = Array.isArray(parsed.occurrences) ? parsed.occurrences.map(function(o){ return Object.assign({}, o, {id:o.id||uid()}); }) : [];
       var importedLocations = (parsed.locations && typeof parsed.locations==='object') ? parsed.locations : {};
       state.locations = {
         manutencao: Array.isArray(importedLocations.manutencao) ? importedLocations.manutencao : [],
+        rotina: Array.isArray(importedLocations.rotina) ? importedLocations.rotina : [],
         combustivel: Array.isArray(importedLocations.combustivel) ? importedLocations.combustivel : [],
         ocorrencia: Array.isArray(importedLocations.ocorrencia) ? importedLocations.ocorrencia : []
       };
@@ -1843,7 +1903,21 @@ function handleImportFile(e){
         state.maintenance.forEach(function(m){ if(!m.vehicleId) m.vehicleId = legacyId; });
         state.fuel.forEach(function(f){ if(!f.vehicleId) f.vehicleId = legacyId; });
       }
-      state.importMsg = 'Importado: '+state.vehicles.length+' veículo(s), '+state.maintenance.length+' manutenções, '+state.fuel.length+' abastecimentos, '+state.occurrences.length+' ocorrências.';
+      // migração rev64: itens de rotina que ainda estejam salvos junto da manutenção geral
+      // (export gerado por versão anterior) são movidos para o novo array state.routine
+      if(state.maintenance.length){
+        var migratedRoutineImp = [];
+        var remainingMaintenanceImp = [];
+        state.maintenance.forEach(function(m){
+          if(SERVICE_TYPES_ROTINA.indexOf(m.description) !== -1){ migratedRoutineImp.push(m); }
+          else { remainingMaintenanceImp.push(m); }
+        });
+        if(migratedRoutineImp.length){
+          state.routine = state.routine.concat(migratedRoutineImp);
+          state.maintenance = remainingMaintenanceImp;
+        }
+      }
+      state.importMsg = 'Importado: '+state.vehicles.length+' veículo(s), '+state.maintenance.length+' manutenções, '+state.routine.length+' itens de rotina, '+state.fuel.length+' abastecimentos, '+state.occurrences.length+' ocorrências.';
       persist();
     }catch(err){
       state.importMsg = 'Não foi possível ler o arquivo. Verifique se é um export válido deste app.';
@@ -1856,7 +1930,7 @@ function handleImportFile(e){
 
 /* ---------- modal ---------- */
 function openModal(name){ modal = name; formPrefill = null; render(); }
-function closeModal(){ modal = null; formPrefill = null; state.pending = null; editingVehicleId = null; vehiclePhotoDraft = null; editingFuelId = null; editingMaintenanceId = null; editingOccurrenceId = null; capacityWarning = null; render(); }
+function closeModal(){ modal = null; formPrefill = null; state.pending = null; editingVehicleId = null; vehiclePhotoDraft = null; editingFuelId = null; editingMaintenanceId = null; editingRoutineId = null; editingOccurrenceId = null; capacityWarning = null; render(); }
 
 /* ---------- render ---------- */
 function render(){
@@ -1873,6 +1947,7 @@ function render(){
   html += '<div class="content">'+renderContent(stats, dashboardStats)+'</div>';
   html += (state.tab !== 'dashboard' && state.tab !== 'missoes' && state.tab !== 'percurso' && state.tab !== 'compartilhamento' && state.activeVehicleId) ? renderFAB() : '';
   html += (modal==='maintenance') ? renderMaintenanceForm() : '';
+  html += (modal==='routine') ? renderRoutineForm() : '';
   html += (modal==='fuel') ? renderFuelForm() : '';
   html += (modal==='occurrence') ? renderOccurrenceForm() : '';
   html += (modal==='odometer') ? renderOdometerForm() : '';
@@ -2001,6 +2076,7 @@ function renderHeader(stats){
 function renderTabs(){
   var allTabs = [
     {key:'manutencao', label:'Manutenção', ic:'wrench', color:'var(--amber)'},
+    {key:'rotina', label:'Rotina', ic:'check', color:'var(--teal)'},
     {key:'abastecimento', label:'Abastecimento', ic:'fuel', color:'var(--teal)'},
     {key:'ocorrencias', label:'Ocorrências', ic:'alert', color:'var(--red)'},
     {key:'percurso', label:'Percurso', ic:'route', color:'var(--teal)'},
@@ -2020,13 +2096,14 @@ function renderTabs(){
   return html;
 }
 function renderTabTitle(){
-  var titles = { manutencao:'Manutenção', abastecimento:'Abastecimento', ocorrencias:'Ocorrências', percurso:'Percurso', compartilhamento:'Conversa', missoes:'Missões', dashboard:'Dashboard' };
+  var titles = { manutencao:'Manutenção', rotina:'Rotina', abastecimento:'Abastecimento', ocorrencias:'Ocorrências', percurso:'Percurso', compartilhamento:'Conversa', missoes:'Missões', dashboard:'Dashboard' };
   return '<h2 class="tab-title">'+(titles[state.tab]||'')+'</h2>';
 }
 
 function renderContent(stats, dashboardStats){
   if(state.tab==='dashboard') return renderDashboard(dashboardStats);
   if(state.tab==='manutencao') return renderMaintenanceList();
+  if(state.tab==='rotina') return renderRoutineList();
   if(state.tab==='ocorrencias') return renderOccurrenceList();
   if(state.tab==='missoes') return renderMissions();
   if(state.tab==='percurso') return renderPercursoTab();
@@ -2067,13 +2144,14 @@ function processFriendAddShares(){
 }
 function findRecordById(type, id){
   var list = type==='manutencao' ? state.maintenance
+    : type==='rotina' ? state.routine
     : type==='combustivel' ? state.fuel
     : type==='ocorrencia' ? state.occurrences
     : type==='percurso' ? (state.percursos||[])
     : [];
   return list.filter(function(r){ return r.id===id; })[0] || null;
 }
-var SHARE_TYPE_ICON = { manutencao:'wrench', combustivel:'fuel', ocorrencia:'alert', percurso:'route' };
+var SHARE_TYPE_ICON = { manutencao:'wrench', rotina:'check', combustivel:'fuel', ocorrencia:'alert', percurso:'route' };
 function getContactName(email){
   if(!email) return '';
   return (state.contacts && state.contacts[email.toLowerCase()]) || '';
@@ -2406,6 +2484,7 @@ function reactToShare(shareId, emoji){
 function shareRecordSummary(type, record){
   if(!record) return 'Registro';
   if(type==='manutencao') return (record.description||'Manutenção')+' · '+formatBRL(record.cost)+' · '+formatDate(record.date);
+  if(type==='rotina') return (record.description||'Rotina')+' · '+formatBRL(record.cost)+' · '+formatDate(record.date);
   if(type==='combustivel') return (record.fuelType||'Combustível')+' · '+(record.liters?Number(record.liters).toLocaleString('pt-BR')+' L · ':'')+formatBRL(record.cost)+' · '+formatDate(record.date);
   if(type==='ocorrencia') return (record.description||'Ocorrência')+' · '+formatDate(record.date);
   if(type==='percurso') return formatKm(record.km)+' · '+formatDate(record.date);
@@ -2983,6 +3062,47 @@ function renderMaintenanceList(){
   return html;
 }
 
+function renderRoutineList(){
+  var errHtml = state.errorMsg ? '<p class="err-msg">'+esc(state.errorMsg)+'</p>' : '';
+  if(!state.activeVehicleId){
+    return '<div class="empty">' +
+      '<div class="empty-icon">'+icon('car',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhum veículo selecionado</p>' +
+      '<p class="empty-sub">Adicione ou selecione um veículo no topo da tela</p>' +
+    '</div>' + errHtml;
+  }
+  var items = state.routine.filter(function(r){ return r.vehicleId === state.activeVehicleId; });
+  if(items.length===0){
+    return '<div class="empty">' +
+      '<div class="empty-icon">'+icon('check',22,'var(--dim2)')+'</div>' +
+      '<p class="empty-title">Nenhum item de rotina registrado</p>' +
+      '<p class="empty-sub">Toque em + para adicionar o primeiro item</p>' +
+    '</div>' + errHtml;
+  }
+  var html = '<div class="list">';
+  items.forEach(function(r){
+    html += '<div class="card">' +
+      '<div class="card-main">' +
+        '<div class="card-title">'+esc(r.description||'Rotina')+'</div>' +
+        '<div class="card-meta">' +
+          '<span>'+icon('calendar',11)+' '+formatDate(r.date)+'</span>' +
+          '<span>'+icon('gauge',11)+' '+formatKm(r.odometer)+'</span>' +
+        '</div>' +
+        (r.address ? '<div class="card-meta"><span>'+icon('mappin',11)+' '+esc(locationDisplayName('rotina', r.address))+'</span></div>' : '') +
+        (r.notes ? '<p class="card-notes">'+esc(r.notes)+'</p>' : '') +
+      '</div>' +
+      '<div class="card-side">' +
+        '<span class="card-cost" style="color:var(--teal)">'+formatBRL(r.cost)+'</span>' +
+        '<button class="card-del" data-action="open-share-compose" data-type="rotina" data-id="'+r.id+'" style="color:var(--teal)">'+icon('share',13)+'</button>' +
+        '<button class="card-del" data-action="edit-routine" data-id="'+r.id+'" style="color:var(--muted)">'+icon('check',14)+'</button>' +
+        '<button class="card-del" data-action="del-routine" data-id="'+r.id+'">'+icon('x',15)+'</button>' +
+      '</div>' +
+    '</div>';
+  });
+  html += '</div>' + errHtml;
+  return html;
+}
+
 function renderOccurrenceList(){
   if(!state.activeVehicleId){
     return '<div class="empty">' +
@@ -3121,11 +3241,15 @@ function renderDashboard(stats){
       '<div class="ov-card highlight">' +
         '<div class="ov-head"><span>Custo total</span></div>' +
         '<div class="ov-val">'+formatBRL(stats.totalAllCosts)+'</div>' +
-        '<div class="ov-sub">manutenção + combustível + ocorrências</div>' +
+        '<div class="ov-sub">manutenção + rotina + combustível + ocorrências</div>' +
       '</div>' +
       '<div class="ov-card">' +
         '<div class="ov-head">'+icon('fuel',11,'var(--teal)')+'<span>Custo com combustível</span></div>' +
         '<div class="ov-val">'+formatBRL(stats.totalCombustivel)+'</div>' +
+      '</div>' +
+      '<div class="ov-card">' +
+        '<div class="ov-head">'+icon('check',11,'var(--teal)')+'<span>Custo com rotina</span></div>' +
+        '<div class="ov-val">'+formatBRL(stats.totalRotina)+'</div>' +
       '</div>' +
       '<div class="ov-card">' +
         '<div class="ov-head"><span>Custo por km</span></div>' +
@@ -3362,6 +3486,28 @@ function renderMaintenanceForm(){
   '</div>';
 }
 
+function renderRoutineForm(){
+  var pf = formPrefill || {};
+  var isEdit = !!editingRoutineId;
+  var selectedService = pf.description && ROTINA_FORM_TYPES.indexOf(pf.description) !== -1 ? pf.description : (pf.description ? 'Outro' : ROTINA_FORM_TYPES[0]);
+  var isCustom = selectedService === 'Outro';
+  var optOf = function(s){ return '<option value="'+esc(s)+'"'+(s===selectedService?' selected':'')+'>'+esc(s)+'</option>'; };
+  var opts = ROTINA_FORM_TYPES.map(optOf).join('');
+  return '<div class="overlay" data-action="close-modal-bg">' +
+    '<div class="sheet teal" onclick="event.stopPropagation()">' +
+      '<div class="sheet-head"><h2>'+(isEdit?'Editar item de rotina':'Novo item de rotina')+'</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
+      fieldHtml('Tipo de rotina', '<select id="f-service">'+opts+'</select>') +
+      '<div id="f-custom-wrap" style="display:'+(isCustom?'block':'none')+'">'+fieldHtml('Especifique a rotina', '<input id="f-custom" value="'+esc(isCustom?pf.description:'')+'" placeholder="Ex: Verificar limpador de para-brisa">')+'</div>' +
+      fieldHtml('Data', '<input id="f-date" type="date" value="'+esc(pf.date || new Date().toISOString().slice(0,10))+'">') +
+      fieldHtml('Custo (R$)', '<input id="f-cost" type="text" inputmode="decimal" value="'+toMaskedStr(pf.cost)+'" placeholder="0,00">') +
+      odoFieldHtml(pf.odometer) +
+      addressFieldHtml(pf.address, 'Endereço (oficina, local do serviço)', 'rotina') +
+      fieldHtml('Observações', '<textarea id="f-notes" rows="3" placeholder="Ex: Detalhes do item de rotina">'+esc(pf.notes||'')+'</textarea>') +
+      '<button class="btn-primary" data-action="save-routine">'+(isEdit?'Salvar alterações':'Salvar item de rotina')+' '+icon('chevron',16,'var(--on-accent)')+'</button>' +
+    '</div>' +
+  '</div>';
+}
+
 function renderOdometerForm(){
   var pf = formPrefill || {};
   return '<div class="overlay" data-action="close-modal-bg">' +
@@ -3519,7 +3665,7 @@ function computeMaintenanceAlerts(vehicleId, currentOdo){
   return alerts.sort(function(a,b){ return a.remaining - b.remaining; });
 }
 
-var TAB_LABELS = { manutencao:'Manutenção', abastecimento:'Abastecimento', ocorrencias:'Ocorrências', percurso:'Percurso', compartilhamento:'Conversa', missoes:'Missões', dashboard:'Dashboard' };
+var TAB_LABELS = { manutencao:'Manutenção', rotina:'Rotina', abastecimento:'Abastecimento', ocorrencias:'Ocorrências', percurso:'Percurso', compartilhamento:'Conversa', missoes:'Missões', dashboard:'Dashboard' };
 function renderCustomModePanel(){
   var html = '<div style="background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:12px; margin:2px 0 4px;">' +
     '<span class="field-label" style="display:block; margin-bottom:10px;">Abas que ficam visíveis</span>' +
@@ -3864,8 +4010,8 @@ function attachEvents(){
         render();
       }
       else if(action==='open-form'){
-        modal = state.tab==='manutencao' ? 'maintenance' : (state.tab==='ocorrencias' ? 'occurrence' : 'fuel');
-        editingFuelId = null; editingMaintenanceId = null; editingOccurrenceId = null;
+        modal = state.tab==='manutencao' ? 'maintenance' : (state.tab==='rotina' ? 'routine' : (state.tab==='ocorrencias' ? 'occurrence' : 'fuel'));
+        editingFuelId = null; editingMaintenanceId = null; editingRoutineId = null; editingOccurrenceId = null;
         var lastOdo = state.activeVehicleId ? computeStatsForVehicle(state.activeVehicleId).currentOdo : null;
         formPrefill = (lastOdo!=null && lastOdo>0) ? { odometer: lastOdo } : null;
         if(modal==='fuel') fuelGaugeFraction = 0.5;
@@ -3947,6 +4093,17 @@ function attachEvents(){
           render();
         }
       }
+      else if(action==='del-routine'){ removeRoutine(el.getAttribute('data-id')); }
+      else if(action==='edit-routine'){
+        var rid = el.getAttribute('data-id');
+        var rentry = state.routine.find(function(x){return x.id===rid;});
+        if(rentry){
+          editingRoutineId = rid;
+          formPrefill = rentry;
+          modal = 'routine';
+          render();
+        }
+      }
       else if(action==='find-address-maps'){
         var addrVal = (document.getElementById('f-address').value || '').trim();
         awaitingAddressPaste = true;
@@ -4025,6 +4182,26 @@ function attachEvents(){
         persist(); // garante que o nome do local (atualizado após o addMaintenance já ter persistido) não se perca
         triggerOdoRoll();
         if(isPending) render(); else closeModal();
+      }
+      else if(action==='save-routine'){
+        var rdate = document.getElementById('f-date').value;
+        var rservice = document.getElementById('f-service').value;
+        var rcustom = document.getElementById('f-custom').value;
+        var rcost = parseMasked(document.getElementById('f-cost').value);
+        var rodo = document.getElementById('f-odo').value;
+        var raddress = document.getElementById('f-address').value.trim();
+        var raddressName = document.getElementById('f-location-name') ? document.getElementById('f-location-name').value : '';
+        var rnotes = document.getElementById('f-notes').value;
+        if(!rdate || !rodo) return;
+        freezeOdoDisplay();
+        if(state.tabSoundEnabled!==false) playTabSound();
+        var rdescription = rservice==='Outro' ? (rcustom || 'Outro') : rservice;
+        var isPendingR = addRoutine({ date:rdate, description:rdescription, cost:rcost, odometer:parseKmValue(rodo), address:raddress, notes:rnotes }, editingRoutineId);
+        var geoR = geoCoordsForAddress(raddress);
+        saveLocationIfNew('rotina', raddress, raddressName, geoR ? geoR.lat : null, geoR ? geoR.lng : null);
+        persist(); // garante que o nome do local (atualizado após o addRoutine já ter persistido) não se perca
+        triggerOdoRoll();
+        if(isPendingR) render(); else closeModal();
       }
       else if(action==='save-occurrence'){
         var odate = document.getElementById('f-date').value;
@@ -4362,9 +4539,9 @@ function attachEvents(){
 /* ---------- init ---------- */
 var APPMODE_STORAGE_KEY = 'controle-veiculo-appmode';
 var CUSTOM_CONFIG_STORAGE_KEY = 'controle-veiculo-custommode';
-var ALL_TABS = ['manutencao','abastecimento','ocorrencias','percurso','compartilhamento','missoes','dashboard'];
-var SIMPLIFIED_TABS = ['manutencao','abastecimento','compartilhamento','missoes','dashboard'];
-var DEFAULT_NEW_USER_TABS = ['manutencao','abastecimento','missoes','dashboard']; // primeiro acesso: conjunto enxuto de abas habilitadas
+var ALL_TABS = ['manutencao','rotina','abastecimento','ocorrencias','percurso','compartilhamento','missoes','dashboard'];
+var SIMPLIFIED_TABS = ['manutencao','rotina','abastecimento','compartilhamento','missoes','dashboard'];
+var DEFAULT_NEW_USER_TABS = ['manutencao','rotina','abastecimento','missoes','dashboard']; // primeiro acesso: conjunto enxuto de abas habilitadas
 var appMode = 'completo'; // 'completo' | 'simplificado' | 'personalizado' — controla quais abas aparecem e se o campo de local pede endereço completo ou só um nome
 var customTabs = ALL_TABS.slice(); // abas ativas no modo Personalizado
 var customLocationMode = 'endereco'; // 'endereco' | 'nome' — forma de marcar o local no modo Personalizado
