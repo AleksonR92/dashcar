@@ -983,7 +983,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev64'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev65'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -2075,8 +2075,8 @@ function renderHeader(stats){
 
 function renderTabs(){
   var allTabs = [
-    {key:'manutencao', label:'Manutenção', ic:'wrench', color:'var(--amber)'},
     {key:'rotina', label:'Rotina', ic:'check', color:'var(--teal)'},
+    {key:'manutencao', label:'Manutenção', ic:'wrench', color:'var(--amber)'},
     {key:'abastecimento', label:'Abastecimento', ic:'fuel', color:'var(--teal)'},
     {key:'ocorrencias', label:'Ocorrências', ic:'alert', color:'var(--red)'},
     {key:'percurso', label:'Percurso', ic:'route', color:'var(--teal)'},
@@ -3168,7 +3168,7 @@ function renderFuelList(){
         '<div class="card-meta">' +
           '<span>'+icon('calendar',11)+' '+formatDate(f.date)+'</span>' +
           '<span>'+icon('gauge',11)+' '+formatKm(f.odometer)+'</span>' +
-          '<span>'+(f.liters ? Number(f.liters).toLocaleString('pt-BR')+' L' : '')+'</span>' +
+          '<span>'+((f.liters && f.cost) ? formatBRL(f.cost/f.liters)+'/L' : '')+'</span>' +
         '</div>' +
         (f.address ? '<div class="card-meta"><span>'+icon('mappin',11)+' '+esc(locationDisplayName('combustivel', f.address))+'</span></div>' : '') +
       '</div>' +
@@ -3989,7 +3989,7 @@ function attachEvents(){
       else if(action==='open-achievement-share'){ openAchievementShare(); }
       else if(action==='close-achievement-share'){ if(e.target===el) closeAchievementShare(); }
       else if(action==='open-badges-gallery'){ openBadgesGallery(); }
-      else if(action==='close-badges-gallery'){ if(e.target===el) closeBadgesGallery(); }
+      else if(action==='close-badges-gallery'){ closeBadgesGallery(); }
       else if(action==='do-share-achievement'){ shareAchievementCanvas(); }
       else if(action==='download-achievement'){ downloadAchievementCanvas(); }
       else if(action==='open-conversation'){
@@ -4005,7 +4005,7 @@ function attachEvents(){
       else if(action==='set-tab'){
         var newTab = el.getAttribute('data-tab');
         state.tab = newTab;
-        if(state.tab==='dashboard') evaluateNavigationMissions(state.activeVehicleId);
+        if(state.tab==='dashboard'){ evaluateNavigationMissions(state.activeVehicleId); persist(); }
         if(state.tab==='compartilhamento' && !sharesLoading) loadShares();
         render();
       }
@@ -4539,9 +4539,9 @@ function attachEvents(){
 /* ---------- init ---------- */
 var APPMODE_STORAGE_KEY = 'controle-veiculo-appmode';
 var CUSTOM_CONFIG_STORAGE_KEY = 'controle-veiculo-custommode';
-var ALL_TABS = ['manutencao','rotina','abastecimento','ocorrencias','percurso','compartilhamento','missoes','dashboard'];
-var SIMPLIFIED_TABS = ['manutencao','rotina','abastecimento','compartilhamento','missoes','dashboard'];
-var DEFAULT_NEW_USER_TABS = ['manutencao','rotina','abastecimento','missoes','dashboard']; // primeiro acesso: conjunto enxuto de abas habilitadas
+var ALL_TABS = ['rotina','manutencao','abastecimento','ocorrencias','percurso','compartilhamento','missoes','dashboard'];
+var SIMPLIFIED_TABS = ['rotina','manutencao','abastecimento','compartilhamento','missoes','dashboard'];
+var DEFAULT_NEW_USER_TABS = ['rotina','manutencao','abastecimento','missoes','dashboard']; // primeiro acesso: conjunto enxuto de abas habilitadas
 var appMode = 'completo'; // 'completo' | 'simplificado' | 'personalizado' — controla quais abas aparecem e se o campo de local pede endereço completo ou só um nome
 var customTabs = ALL_TABS.slice(); // abas ativas no modo Personalizado
 var customLocationMode = 'endereco'; // 'endereco' | 'nome' — forma de marcar o local no modo Personalizado
