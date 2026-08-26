@@ -390,6 +390,15 @@
   .dash-filter-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:10px; }
   .dash-filter-btn{ padding:8px 14px; border-radius:8px; border:1px solid var(--border2); background:transparent; color:var(--text); font-size:12px; cursor:pointer; }
   .dash-filter-btn.primary{ background:var(--amber); border-color:var(--amber); color:var(--on-accent); font-weight:700; }
+  .range-slider-labels{ display:flex; justify-content:space-between; margin-bottom:14px; }
+  .range-slider-label{ display:flex; flex-direction:column; gap:2px; }
+  .range-slider-label .rsl-tag{ font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; }
+  .range-slider-label .rsl-date{ font-size:14px; font-weight:700; color:var(--text); }
+  .range-slider{ position:relative; height:36px; margin:0 4px 4px; touch-action:none; }
+  .range-slider-track{ position:absolute; top:50%; left:0; right:0; height:4px; background:var(--border2); border-radius:999px; transform:translateY(-50%); }
+  .range-slider-fill{ position:absolute; top:50%; height:4px; background:var(--amber); border-radius:999px; transform:translateY(-50%); }
+  .range-slider-handle{ position:absolute; top:50%; width:24px; height:24px; margin-left:-12px; transform:translateY(-50%); border-radius:50%; background:var(--amber); border:3px solid var(--panel); box-shadow:0 1px 4px rgba(0,0,0,.3); cursor:grab; }
+  .range-slider-handle:active{ cursor:grabbing; }
   .dash-card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; height:250px; position:relative; }
   .dash-card.short{ height:170px; }
   .ov-group-label{ font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim2); font-weight:700; margin:12px 2px 8px; }
@@ -990,7 +999,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev66'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev67'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1556,6 +1565,22 @@ function getVolumeBefore(entry, fallbackCapacity){
   var cap = entry.tankCapacityAtEntry || fallbackCapacity || DEFAULT_TANK_CAPACITY;
   if(entry.gaugeBefore!=null) return entry.gaugeBefore * cap;
   return null;
+}
+
+// Retorna { min, max } (strings YYYY-MM-DD) cobrindo todas as datas registradas (manutenção, combustível, ocorrência)
+// do veículo informado. Se não houver nenhum registro, usa hoje como min e max (régua fica com um único ponto útil).
+function getVehicleDateRange(vehicleId){
+  var dates = []
+    .concat(state.maintenance.filter(function(m){ return m.vehicleId===vehicleId; }).map(function(m){ return m.date; }))
+    .concat(state.fuel.filter(function(f){ return f.vehicleId===vehicleId; }).map(function(f){ return f.date; }))
+    .concat(state.occurrences.filter(function(o){ return o.vehicleId===vehicleId; }).map(function(o){ return o.date; }))
+    .filter(Boolean);
+  var todayStr = new Date().toISOString().slice(0,10);
+  if(!dates.length) return { min: todayStr, max: todayStr };
+  dates.sort();
+  var min = dates[0], max = dates[dates.length-1];
+  if(max < todayStr) max = todayStr; // permite arrastar o cursor final até o dia de hoje
+  return { min: min, max: max };
 }
 
 function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
@@ -3214,16 +3239,24 @@ function renderDashboard(stats){
     return html;
   }
 
+  var vehicleRange = getVehicleDateRange(state.activeVehicleId);
+  var rangeStartVal = dashFilterStart || vehicleRange.min;
+  var rangeEndVal = dashFilterEnd || vehicleRange.max;
   html += '<div>' +
     '<h3>Filtrar por período</h3>' +
     '<div class="dash-filter">' +
-      '<div class="field-row">' +
-        fieldHtml('De', '<input type="date" id="dash-filter-start" value="'+esc(dashFilterStart)+'">') +
-        fieldHtml('Até', '<input type="date" id="dash-filter-end" value="'+esc(dashFilterEnd)+'">') +
+      '<div class="range-slider-labels">' +
+        '<div class="range-slider-label"><span class="rsl-tag">De</span><span class="rsl-date" id="range-label-start">'+formatDate(rangeStartVal)+'</span></div>' +
+        '<div class="range-slider-label" style="align-items:flex-end;"><span class="rsl-tag">Até</span><span class="rsl-date" id="range-label-end">'+formatDate(rangeEndVal)+'</span></div>' +
+      '</div>' +
+      '<div class="range-slider" id="dash-range-slider" data-min="'+esc(vehicleRange.min)+'" data-max="'+esc(vehicleRange.max)+'" data-start="'+esc(rangeStartVal)+'" data-end="'+esc(rangeEndVal)+'">' +
+        '<div class="range-slider-track"></div>' +
+        '<div class="range-slider-fill" id="range-slider-fill"></div>' +
+        '<div class="range-slider-handle" id="range-handle-start" role="slider" aria-label="Início do período"></div>' +
+        '<div class="range-slider-handle" id="range-handle-end" role="slider" aria-label="Fim do período"></div>' +
       '</div>' +
       '<div class="dash-filter-actions">' +
         '<button class="dash-filter-btn" data-action="clear-dash-filter">Limpar</button>' +
-        '<button class="dash-filter-btn primary" data-action="apply-dash-filter">Filtrar</button>' +
       '</div>' +
     '</div>' +
   '</div>';
@@ -4166,11 +4199,6 @@ function attachEvents(){
       else if(action==='confirm-pending'){ confirmPending(); render(); }
       else if(action==='ack-capacity-warning'){ capacityWarning = null; render(); }
       else if(action==='dismiss-celebration'){ dismissCelebration(); }
-      else if(action==='apply-dash-filter'){
-        dashFilterStart = document.getElementById('dash-filter-start').value;
-        dashFilterEnd = document.getElementById('dash-filter-end').value;
-        render();
-      }
       else if(action==='clear-dash-filter'){ dashFilterStart=''; dashFilterEnd=''; render(); }
       else if(action==='export'){ exportData(); }
       else if(action==='import'){ triggerImport(); }
@@ -4539,6 +4567,77 @@ function attachEvents(){
     gaugeSvg.addEventListener('pointercancel', function(){ dragging = false; });
   }
 
+  /* ---------- régua de período (dashboard): dois cursores arrastáveis sobre uma linha do tempo ---------- */
+  var rangeSlider = document.getElementById('dash-range-slider');
+  if(rangeSlider){
+    var rMin = rangeSlider.getAttribute('data-min');
+    var rMax = rangeSlider.getAttribute('data-max');
+    var minTs = new Date(rMin+'T00:00:00').getTime();
+    var maxTs = new Date(rMax+'T00:00:00').getTime();
+    var totalSpan = Math.max(1, maxTs - minTs); // evita divisão por zero quando só há 1 dia de dados
+    var handleStart = document.getElementById('range-handle-start');
+    var handleEnd = document.getElementById('range-handle-end');
+    var fillEl = document.getElementById('range-slider-fill');
+    var labelStart = document.getElementById('range-label-start');
+    var labelEnd = document.getElementById('range-label-end');
+    var curStartTs = new Date((rangeSlider.getAttribute('data-start')||rMin)+'T00:00:00').getTime();
+    var curEndTs = new Date((rangeSlider.getAttribute('data-end')||rMax)+'T00:00:00').getTime();
+
+    function tsToPct(ts){ return Math.max(0, Math.min(100, ((ts-minTs)/totalSpan)*100 )); }
+    function tsToDateStr(ts){ return new Date(ts).toISOString().slice(0,10); }
+    function pctFromEvent(evt){
+      var rect = rangeSlider.getBoundingClientRect();
+      var x = Math.max(0, Math.min(rect.width, evt.clientX - rect.left));
+      return rect.width>0 ? (x/rect.width) : 0;
+    }
+    function snapToDay(pct){
+      var ts = minTs + pct*totalSpan;
+      var dayMs = 24*60*60*1000;
+      return Math.round(ts/dayMs)*dayMs;
+    }
+    function updateVisual(){
+      handleStart.style.left = tsToPct(curStartTs)+'%';
+      handleEnd.style.left = tsToPct(curEndTs)+'%';
+      fillEl.style.left = tsToPct(curStartTs)+'%';
+      fillEl.style.width = (tsToPct(curEndTs)-tsToPct(curStartTs))+'%';
+      labelStart.textContent = formatDate(tsToDateStr(curStartTs));
+      labelEnd.textContent = formatDate(tsToDateStr(curEndTs));
+    }
+    updateVisual();
+
+    var draggingHandle = null;
+    function startDrag(which){
+      return function(evt){
+        draggingHandle = which;
+        try{ rangeSlider.setPointerCapture(evt.pointerId); }catch(e){}
+        evt.preventDefault();
+      };
+    }
+    function onMove(evt){
+      if(!draggingHandle) return;
+      var pct = pctFromEvent(evt);
+      var snapped = snapToDay(pct);
+      if(draggingHandle==='start'){
+        curStartTs = Math.min(snapped, curEndTs);
+      } else {
+        curEndTs = Math.max(snapped, curStartTs);
+      }
+      updateVisual();
+    }
+    function onUp(){
+      if(!draggingHandle) return;
+      draggingHandle = null;
+      dashFilterStart = tsToDateStr(curStartTs);
+      dashFilterEnd = tsToDateStr(curEndTs);
+      render();
+    }
+    handleStart.addEventListener('pointerdown', startDrag('start'));
+    handleEnd.addEventListener('pointerdown', startDrag('end'));
+    rangeSlider.addEventListener('pointermove', onMove);
+    rangeSlider.addEventListener('pointerup', onUp);
+    rangeSlider.addEventListener('pointercancel', function(){ draggingHandle = null; });
+  }
+
   if(pendingOdoRollAnimation){
     pendingOdoRollAnimation = false;
     var odoStrips = document.querySelectorAll('.odo-digit-strip');
@@ -4613,7 +4712,7 @@ function loadCustomConfig(){
 var THEME_STORAGE_KEY = 'controle-veiculo-theme';
 var THEMES = {
   preto: {
-    name: 'Preto (atual)',
+    name: 'Preto',
     vars: { '--bg':'#111317','--bg2':'#17191d','--panel':'#1a1c20','--panel2':'#1c1e22','--border':'#262931','--border2':'#33363d','--text':'#EDEAE3','--muted':'#8a8f98','--dim':'#6a6f78','--dim2':'#5a5f68','--amber':'#E8A33D','--teal':'#3D7068','--red':'#C1503F','--on-accent':'#14161a','--sans':"'Inter', sans-serif" }
   },
   branco: {
@@ -4623,6 +4722,10 @@ var THEMES = {
   rosa: {
     name: 'Rosa',
     vars: { '--bg':'#fff2f6','--bg2':'#ffffff','--panel':'#ffe9f0','--panel2':'#ffdce8','--border':'#f6c3d6','--border2':'#eda9c4','--text':'#4a1f2e','--muted':'#96677c','--dim':'#b98a9c','--dim2':'#c9a2b2','--amber':'#d6336c','--teal':'#9c4f7c','--red':'#c0392b','--on-accent':'#ffffff','--sans':"'Quicksand', sans-serif" }
+  },
+  verde: {
+    name: 'Verde',
+    vars: { '--bg':'#f0f5ee','--bg2':'#ffffff','--panel':'#e7f0e3','--panel2':'#dceada','--border':'#c7dcc1','--border2':'#aecda5','--text':'#1f2e1c','--muted':'#5c7355','--dim':'#7c9474','--dim2':'#93a98c','--amber':'#c97a1a','--teal':'#2f7d52','--red':'#b0392c','--on-accent':'#ffffff','--sans':"'Poppins', sans-serif" }
   }
 };
 var currentTheme = 'preto';
