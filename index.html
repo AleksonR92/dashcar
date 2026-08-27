@@ -394,11 +394,16 @@
   .range-slider-label{ display:flex; flex-direction:column; gap:2px; }
   .range-slider-label .rsl-tag{ font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; }
   .range-slider-label .rsl-date{ font-size:14px; font-weight:700; color:var(--text); }
-  .range-slider{ position:relative; height:36px; margin:0 4px 4px; touch-action:none; }
-  .range-slider-track{ position:absolute; top:50%; left:0; right:0; height:4px; background:var(--border2); border-radius:999px; transform:translateY(-50%); }
-  .range-slider-fill{ position:absolute; top:50%; height:4px; background:var(--amber); border-radius:999px; transform:translateY(-50%); }
-  .range-slider-handle{ position:absolute; top:50%; width:24px; height:24px; margin-left:-12px; transform:translateY(-50%); border-radius:50%; background:var(--amber); border:3px solid var(--panel); box-shadow:0 1px 4px rgba(0,0,0,.3); cursor:grab; }
-  .range-slider-handle:active{ cursor:grabbing; }
+  .range-slider-dual{ position:relative; height:32px; margin:0 4px 4px; }
+  .range-slider-track2{ position:absolute; top:50%; left:0; right:0; height:4px; background:var(--border2); border-radius:999px; transform:translateY(-50%); }
+  .range-slider-fill2{ position:absolute; top:50%; height:4px; background:var(--amber); border-radius:999px; transform:translateY(-50%); }
+  .range-input{ position:absolute; top:0; left:0; width:100%; height:32px; margin:0; background:transparent; -webkit-appearance:none; appearance:none; pointer-events:none; }
+  .range-input::-webkit-slider-runnable-track{ background:transparent; -webkit-appearance:none; height:32px; }
+  .range-input::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; pointer-events:auto; width:24px; height:24px; margin-top:0; border-radius:50%; background:var(--amber); border:3px solid var(--panel); box-shadow:0 1px 4px rgba(0,0,0,.3); cursor:grab; }
+  .range-input::-moz-range-track{ background:transparent; border:none; height:32px; }
+  .range-input::-moz-range-thumb{ pointer-events:auto; width:24px; height:24px; border-radius:50%; background:var(--amber); border:3px solid var(--panel); box-shadow:0 1px 4px rgba(0,0,0,.3); cursor:grab; }
+  .range-input:last-of-type{ z-index:2; }
+  .range-input:first-of-type{ z-index:1; }
   .dash-card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; height:250px; position:relative; }
   .dash-card.short{ height:170px; }
   .ov-group-label{ font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim2); font-weight:700; margin:12px 2px 8px; }
@@ -999,7 +1004,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev67'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev68'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1579,8 +1584,36 @@ function getVehicleDateRange(vehicleId){
   if(!dates.length) return { min: todayStr, max: todayStr };
   dates.sort();
   var min = dates[0], max = dates[dates.length-1];
-  if(max < todayStr) max = todayStr; // permite arrastar o cursor final até o dia de hoje
+  if(max < todayStr) max = todayStr; // permite arrastar o cursor final até o mês atual
   return { min: min, max: max };
+}
+
+var MONTH_ABBR_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function monthKeyFromDate(dateStr){ return dateStr.slice(0,7); } // 'YYYY-MM'
+function firstDayOfMonth(key){ return key+'-01'; }
+function lastDayOfMonth(key){
+  var parts = key.split('-'); var y=+parts[0], m=+parts[1];
+  var lastDay = new Date(y, m, 0).getDate(); // dia 0 do mês seguinte = último dia deste mês
+  return key+'-'+(lastDay<10?'0':'')+lastDay;
+}
+function monthLabel(key){
+  var parts = key.split('-');
+  return MONTH_ABBR_PT[(+parts[1])-1]+'/'+parts[0];
+}
+// Lista de meses (YYYY-MM) cobrindo do primeiro ao último registro do veículo (ou até o mês atual)
+function getVehicleMonthRange(vehicleId){
+  var range = getVehicleDateRange(vehicleId);
+  var startParts = monthKeyFromDate(range.min).split('-');
+  var endParts = monthKeyFromDate(range.max).split('-');
+  var y=+startParts[0], m=+startParts[1];
+  var ey=+endParts[0], em=+endParts[1];
+  var months = [];
+  while(y<ey || (y===ey && m<=em)){
+    months.push(y+'-'+(m<10?'0':'')+m);
+    m++;
+    if(m>12){ m=1; y++; }
+  }
+  return months;
 }
 
 function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
@@ -3239,21 +3272,24 @@ function renderDashboard(stats){
     return html;
   }
 
-  var vehicleRange = getVehicleDateRange(state.activeVehicleId);
-  var rangeStartVal = dashFilterStart || vehicleRange.min;
-  var rangeEndVal = dashFilterEnd || vehicleRange.max;
+  var vehicleMonths = getVehicleMonthRange(state.activeVehicleId);
+  var monthLastIdx = vehicleMonths.length-1;
+  var monthStartIdx = dashFilterStart ? vehicleMonths.indexOf(monthKeyFromDate(dashFilterStart)) : 0;
+  if(monthStartIdx<0) monthStartIdx = 0;
+  var monthEndIdx = dashFilterEnd ? vehicleMonths.indexOf(monthKeyFromDate(dashFilterEnd)) : monthLastIdx;
+  if(monthEndIdx<0) monthEndIdx = monthLastIdx;
   html += '<div>' +
     '<h3>Filtrar por período</h3>' +
     '<div class="dash-filter">' +
       '<div class="range-slider-labels">' +
-        '<div class="range-slider-label"><span class="rsl-tag">De</span><span class="rsl-date" id="range-label-start">'+formatDate(rangeStartVal)+'</span></div>' +
-        '<div class="range-slider-label" style="align-items:flex-end;"><span class="rsl-tag">Até</span><span class="rsl-date" id="range-label-end">'+formatDate(rangeEndVal)+'</span></div>' +
+        '<div class="range-slider-label"><span class="rsl-tag">De</span><span class="rsl-date" id="range-label-start">'+monthLabel(vehicleMonths[monthStartIdx])+'</span></div>' +
+        '<div class="range-slider-label" style="align-items:flex-end;"><span class="rsl-tag">Até</span><span class="rsl-date" id="range-label-end">'+monthLabel(vehicleMonths[monthEndIdx])+'</span></div>' +
       '</div>' +
-      '<div class="range-slider" id="dash-range-slider" data-min="'+esc(vehicleRange.min)+'" data-max="'+esc(vehicleRange.max)+'" data-start="'+esc(rangeStartVal)+'" data-end="'+esc(rangeEndVal)+'">' +
-        '<div class="range-slider-track"></div>' +
-        '<div class="range-slider-fill" id="range-slider-fill"></div>' +
-        '<div class="range-slider-handle" id="range-handle-start" role="slider" aria-label="Início do período"></div>' +
-        '<div class="range-slider-handle" id="range-handle-end" role="slider" aria-label="Fim do período"></div>' +
+      '<div class="range-slider-dual">' +
+        '<div class="range-slider-track2"></div>' +
+        '<div class="range-slider-fill2" id="range-slider-fill"></div>' +
+        '<input type="range" id="range-input-start" class="range-input" min="0" max="'+monthLastIdx+'" step="1" value="'+monthStartIdx+'">' +
+        '<input type="range" id="range-input-end" class="range-input" min="0" max="'+monthLastIdx+'" step="1" value="'+monthEndIdx+'">' +
       '</div>' +
       '<div class="dash-filter-actions">' +
         '<button class="dash-filter-btn" data-action="clear-dash-filter">Limpar</button>' +
@@ -4567,75 +4603,42 @@ function attachEvents(){
     gaugeSvg.addEventListener('pointercancel', function(){ dragging = false; });
   }
 
-  /* ---------- régua de período (dashboard): dois cursores arrastáveis sobre uma linha do tempo ---------- */
-  var rangeSlider = document.getElementById('dash-range-slider');
-  if(rangeSlider){
-    var rMin = rangeSlider.getAttribute('data-min');
-    var rMax = rangeSlider.getAttribute('data-max');
-    var minTs = new Date(rMin+'T00:00:00').getTime();
-    var maxTs = new Date(rMax+'T00:00:00').getTime();
-    var totalSpan = Math.max(1, maxTs - minTs); // evita divisão por zero quando só há 1 dia de dados
-    var handleStart = document.getElementById('range-handle-start');
-    var handleEnd = document.getElementById('range-handle-end');
-    var fillEl = document.getElementById('range-slider-fill');
-    var labelStart = document.getElementById('range-label-start');
-    var labelEnd = document.getElementById('range-label-end');
-    var curStartTs = new Date((rangeSlider.getAttribute('data-start')||rMin)+'T00:00:00').getTime();
-    var curEndTs = new Date((rangeSlider.getAttribute('data-end')||rMax)+'T00:00:00').getTime();
+  /* ---------- régua de período (dashboard, por mês): dois inputs range nativos sobrepostos ---------- */
+  var rangeInputStart = document.getElementById('range-input-start');
+  var rangeInputEnd = document.getElementById('range-input-end');
+  if(rangeInputStart && rangeInputEnd){
+    var monthsForSlider = getVehicleMonthRange(state.activeVehicleId);
+    var sliderMaxIdx = monthsForSlider.length-1;
+    var fillEl2 = document.getElementById('range-slider-fill');
+    var labelStart2 = document.getElementById('range-label-start');
+    var labelEnd2 = document.getElementById('range-label-end');
 
-    function tsToPct(ts){ return Math.max(0, Math.min(100, ((ts-minTs)/totalSpan)*100 )); }
-    function tsToDateStr(ts){ return new Date(ts).toISOString().slice(0,10); }
-    function pctFromEvent(evt){
-      var rect = rangeSlider.getBoundingClientRect();
-      var x = Math.max(0, Math.min(rect.width, evt.clientX - rect.left));
-      return rect.width>0 ? (x/rect.width) : 0;
+    function updateFillAndLabels(){
+      var s = +rangeInputStart.value, e = +rangeInputEnd.value;
+      var pctS = sliderMaxIdx>0 ? (s/sliderMaxIdx)*100 : 0;
+      var pctE = sliderMaxIdx>0 ? (e/sliderMaxIdx)*100 : 100;
+      fillEl2.style.left = pctS+'%';
+      fillEl2.style.width = Math.max(0, pctE-pctS)+'%';
+      labelStart2.textContent = monthLabel(monthsForSlider[s]);
+      labelEnd2.textContent = monthLabel(monthsForSlider[e]);
     }
-    function snapToDay(pct){
-      var ts = minTs + pct*totalSpan;
-      var dayMs = 24*60*60*1000;
-      return Math.round(ts/dayMs)*dayMs;
+    function clampInputs(which){
+      var s = +rangeInputStart.value, e = +rangeInputEnd.value;
+      if(which==='start' && s>e) rangeInputStart.value = e;
+      if(which==='end' && e<s) rangeInputEnd.value = s;
+      updateFillAndLabels();
     }
-    function updateVisual(){
-      handleStart.style.left = tsToPct(curStartTs)+'%';
-      handleEnd.style.left = tsToPct(curEndTs)+'%';
-      fillEl.style.left = tsToPct(curStartTs)+'%';
-      fillEl.style.width = (tsToPct(curEndTs)-tsToPct(curStartTs))+'%';
-      labelStart.textContent = formatDate(tsToDateStr(curStartTs));
-      labelEnd.textContent = formatDate(tsToDateStr(curEndTs));
-    }
-    updateVisual();
-
-    var draggingHandle = null;
-    function startDrag(which){
-      return function(evt){
-        draggingHandle = which;
-        try{ rangeSlider.setPointerCapture(evt.pointerId); }catch(e){}
-        evt.preventDefault();
-      };
-    }
-    function onMove(evt){
-      if(!draggingHandle) return;
-      var pct = pctFromEvent(evt);
-      var snapped = snapToDay(pct);
-      if(draggingHandle==='start'){
-        curStartTs = Math.min(snapped, curEndTs);
-      } else {
-        curEndTs = Math.max(snapped, curStartTs);
-      }
-      updateVisual();
-    }
-    function onUp(){
-      if(!draggingHandle) return;
-      draggingHandle = null;
-      dashFilterStart = tsToDateStr(curStartTs);
-      dashFilterEnd = tsToDateStr(curEndTs);
+    function commitRange(){
+      var s = +rangeInputStart.value, e = +rangeInputEnd.value;
+      dashFilterStart = firstDayOfMonth(monthsForSlider[s]);
+      dashFilterEnd = lastDayOfMonth(monthsForSlider[e]);
       render();
     }
-    handleStart.addEventListener('pointerdown', startDrag('start'));
-    handleEnd.addEventListener('pointerdown', startDrag('end'));
-    rangeSlider.addEventListener('pointermove', onMove);
-    rangeSlider.addEventListener('pointerup', onUp);
-    rangeSlider.addEventListener('pointercancel', function(){ draggingHandle = null; });
+    updateFillAndLabels();
+    rangeInputStart.addEventListener('input', function(){ clampInputs('start'); });
+    rangeInputEnd.addEventListener('input', function(){ clampInputs('end'); });
+    rangeInputStart.addEventListener('change', commitRange);
+    rangeInputEnd.addEventListener('change', commitRange);
   }
 
   if(pendingOdoRollAnimation){
