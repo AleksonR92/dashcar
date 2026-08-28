@@ -109,7 +109,7 @@
   #app{
     max-width:520px; margin:0 auto; min-height:100vh; position:relative;
     background:var(--bg); box-shadow:0 0 60px rgba(0,0,0,.35);
-    overflow-x:hidden; padding-bottom:8px;
+    overflow-x:clip; padding-bottom:8px;
   }
 
   /* ---------- header ---------- */
@@ -1011,7 +1011,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev70'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev71'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -3322,6 +3322,7 @@ function renderDashboard(stats){
         '<span>'+monthLabel(vehicleMonths[0])+'</span><span>'+monthLabel(vehicleMonths[monthLastIdx])+'</span>' +
       '</div>' +
       '<div class="range-presets">' +
+        '<button class="range-preset-btn" data-action="preset-dash-filter" data-months="1">1 mês</button>' +
         '<button class="range-preset-btn" data-action="preset-dash-filter" data-months="3">3 meses</button>' +
         '<button class="range-preset-btn" data-action="preset-dash-filter" data-months="6">6 meses</button>' +
         '<button class="range-preset-btn" data-action="preset-dash-filter" data-months="12">1 ano</button>' +
