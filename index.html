@@ -1059,7 +1059,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev72'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev73'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1110,10 +1110,47 @@ const TANK_CAPACITY = {
   'Audi': {'A3':50,'A4':54,'Q3':60},
   'Volvo': {'XC40':54,'XC60':71},
 };
-function getDefaultTankCapacity(brand, model){
-  if(TANK_CAPACITY[brand] && TANK_CAPACITY[brand][model]) return TANK_CAPACITY[brand][model];
-  return DEFAULT_TANK_CAPACITY;
+/* ---------- motos (rev73) ---------- */
+const VEHICLE_TYPES = [ {key:'carro', label:'Carro', icon:'car'}, {key:'moto', label:'Moto', icon:'moto'} ];
+const MOTO_BRANDS = {
+  'Honda': ['CG 160','Biz 125','Pop 110i','Bros 160','XRE 300','CB 300F Twister','PCX 160','Elite 125','CB 500F','NC 750X'],
+  'Yamaha': ['Factor 150','Fazer FZ15','Fazer FZ25','Crosser 150','Lander 250','NMax 160','XMax 250','Neo 125','MT-03','MT-07'],
+  'Suzuki': ['Intruder 125','V-Strom 650','GSX-S750'],
+  'Kawasaki': ['Ninja 400','Z400','Versys 650','Z900'],
+  'BMW Motorrad': ['G 310 R','G 310 GS','F 850 GS','R 1250 GS'],
+  'Triumph': ['Tiger 900','Trident 660','Street Triple'],
+  'Harley-Davidson': ['Iron 883','Fat Boy','Sportster S'],
+  'Royal Enfield': ['Meteor 350','Classic 350','Himalayan','Interceptor 650'],
+  'Dafra': ['Apache 200','Citycom 300','NH 190'],
+  'Shineray': ['Jet 50','Worker 125','XY 150'],
+  'Haojue': ['DK 150','DR 160','Master Ride 150'],
+};
+const MOTO_BRAND_LIST = Object.keys(MOTO_BRANDS).concat([OUTRA_MARCA]);
+const DEFAULT_MOTO_TANK_CAPACITY = 14; // litros, fallback para motos
+const MOTO_TANK_CAPACITY = {
+  'Honda': {'CG 160':16,'Biz 125':5.1,'Pop 110i':4.2,'Bros 160':12,'XRE 300':13.8,'CB 300F Twister':14.1,'PCX 160':8.1,'Elite 125':5.5,'CB 500F':17.1,'NC 750X':14.1},
+  'Yamaha': {'Factor 150':15.6,'Fazer FZ15':14,'Fazer FZ25':14,'Crosser 150':12,'Lander 250':13.6,'NMax 160':7.1,'XMax 250':13.2,'Neo 125':5.5,'MT-03':14,'MT-07':14},
+  'Suzuki': {'Intruder 125':10,'V-Strom 650':20,'GSX-S750':16},
+  'Kawasaki': {'Ninja 400':14,'Z400':14,'Versys 650':21,'Z900':17},
+  'BMW Motorrad': {'G 310 R':11,'G 310 GS':11,'F 850 GS':15,'R 1250 GS':20},
+  'Triumph': {'Tiger 900':20,'Trident 660':14,'Street Triple':15},
+  'Harley-Davidson': {'Iron 883':12.5,'Fat Boy':18.9,'Sportster S':11.8},
+  'Royal Enfield': {'Meteor 350':15,'Classic 350':13,'Himalayan':15,'Interceptor 650':13.7},
+  'Dafra': {'Apache 200':12,'Citycom 300':11,'NH 190':15},
+  'Shineray': {'Jet 50':4.5,'Worker 125':12,'XY 150':12},
+  'Haojue': {'DK 150':15,'DR 160':12,'Master Ride 150':13},
+};
+function getBrandsFor(type){ return type==='moto' ? MOTO_BRANDS : BRANDS; }
+function getBrandListFor(type){ return type==='moto' ? MOTO_BRAND_LIST : BRAND_LIST; }
+function getDefaultTankFor(type){ return type==='moto' ? DEFAULT_MOTO_TANK_CAPACITY : DEFAULT_TANK_CAPACITY; }
+function getDefaultTankCapacity(brand, model, type){
+  var table = type==='moto' ? MOTO_TANK_CAPACITY : TANK_CAPACITY;
+  if(table[brand] && table[brand][model]) return table[brand][model];
+  return getDefaultTankFor(type);
 }
+function getVehicleType(v){ return (v && v.vehicleType==='moto') ? 'moto' : 'carro'; }
+function vehicleIconName(v){ return getVehicleType(v)==='moto' ? 'moto' : 'car'; }
+let vehicleFormType = null; // tipo escolhido no formulário de veículo aberto ('carro' | 'moto')
 const DEFAULT_GAUGE_DIVISIONS = 8; // nº de traços/segmentos entre E e F, usado para desenhar o marcador
 function getVehicleGaugeDivisions(vehicle){
   var n = vehicle && vehicle.gaugeDivisions;
@@ -1140,6 +1177,7 @@ const ICONS = {
   upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
   file:'<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><polyline points="14 2 14 8 20 8"/>',
   car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>',
+  moto:'<circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M15 6h2.5l3.5 10.5"/><path d="M5.5 16.5 9 11h6l3.5 5.5"/><path d="M9 11 7.5 8H5"/><path d="M13 6h2"/>',
   carcrash:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M13.2 1.5l1.6 2.8-2.3.5 2.9 2-2 2.4"/>',
   mappin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
   route:'<polygon points="3 11 22 2 13 21 11 13 3 11"/>',
@@ -1453,7 +1491,7 @@ function handlePhotoInputChange(e){
         '</div>';
       document.getElementById('v-remove-photo-btn').addEventListener('click', function(){
         vehiclePhotoDraft = null;
-        wrap.innerHTML = '<div class="photo-preview-placeholder">'+icon('car',22,'var(--dim2)')+'</div>' +
+        wrap.innerHTML = '<div class="photo-preview-placeholder">'+icon(vehicleFormType==='moto'?'moto':'car',22,'var(--dim2)')+'</div>' +
           '<div class="photo-actions"><input type="file" id="v-photo-input" accept="image/*" class="native-file-input"></div>';
         document.getElementById('v-photo-input').addEventListener('change', handlePhotoInputChange);
       });
@@ -1971,7 +2009,7 @@ function removeOccurrence(id){
 }
 
 function addVehicle(v){
-  var newVehicle = Object.assign({tankCapacity: getDefaultTankCapacity(v.brand, v.model)}, v, {id: uid()});
+  var newVehicle = Object.assign({tankCapacity: getDefaultTankCapacity(v.brand, v.model, v.vehicleType)}, v, {id: uid()});
   state.vehicles = state.vehicles.concat([newVehicle]);
   state.activeVehicleId = newVehicle.id;
   persist();
@@ -2073,7 +2111,26 @@ function handleImportFile(e){
 
 /* ---------- modal ---------- */
 function openModal(name){ modal = name; formPrefill = null; render(); }
-function closeModal(){ modal = null; formPrefill = null; state.pending = null; editingVehicleId = null; vehiclePhotoDraft = null; editingFuelId = null; editingMaintenanceId = null; editingRoutineId = null; editingOccurrenceId = null; capacityWarning = null; render(); }
+function applyVehicleFormType(type){
+  vehicleFormType = type;
+  document.querySelectorAll('#v-type-row .vtype-chip').forEach(function(chip){
+    var on = chip.getAttribute('data-type')===type;
+    chip.classList.toggle('active', on);
+    var t = VEHICLE_TYPES.find(function(x){ return x.key===chip.getAttribute('data-type'); });
+    chip.innerHTML = icon(t.icon,16,on?'var(--amber)':'var(--muted)') + '<span class="theme-name">'+t.label+'</span>';
+  });
+  var brandSelEl = document.getElementById('v-brand');
+  if(brandSelEl){
+    brandSelEl.innerHTML = getBrandListFor(type).map(function(b){ return '<option value="'+esc(b)+'">'+esc(b)+'</option>'; }).join('');
+    brandSelEl.value = Object.keys(getBrandsFor(type))[0];
+    brandSelEl.dispatchEvent(new Event('change')); // repopula modelos e sugere o tanque
+  }
+  var ph = document.querySelector('#v-photo-wrap .photo-preview-placeholder');
+  if(ph) ph.innerHTML = icon(type==='moto'?'moto':'car',22,'var(--dim2)');
+  var cb = document.getElementById('v-custom-brand'); if(cb) cb.placeholder = type==='moto' ? 'Ex: Ducati' : 'Ex: Subaru';
+  var cm = document.getElementById('v-custom-model'); if(cm) cm.placeholder = type==='moto' ? 'Ex: Monster 797' : 'Ex: Meriva';
+}
+function closeModal(){ modal = null; formPrefill = null; state.pending = null; editingVehicleId = null; vehiclePhotoDraft = null; vehicleFormType = null; editingFuelId = null; editingMaintenanceId = null; editingRoutineId = null; editingOccurrenceId = null; capacityWarning = null; render(); }
 
 /* ---------- render ---------- */
 function render(){
@@ -2138,7 +2195,7 @@ function renderHeader(stats){
   var sub = v ? [v.plate, v.color].filter(Boolean).join(' · ') : '';
   var photoHtml = (v && v.photo)
     ? '<img class="vehicle-photo" src="'+v.photo+'" alt="Foto do veículo">'
-    : '<div class="vehicle-photo-placeholder">'+icon('car',34,'var(--dim2)')+'</div>';
+    : '<div class="vehicle-photo-placeholder">'+icon(vehicleIconName(v),34,'var(--dim2)')+'</div>';
   var currentOdoRounded = Math.round(stats.currentOdo||0);
   var shownOdo = (displayedOdo!=null) ? displayedOdo : currentOdoRounded;
   var digits = odoDigitsHtml(shownOdo);
@@ -3804,24 +3861,34 @@ function renderFuelForm(){
 function renderVehicleForm(){
   var v = editingVehicleId ? (state.vehicles.find(function(x){return x.id===editingVehicleId;}) || {}) : { plate:'', brand:'', model:'', color:'' };
   var isEdit = !!editingVehicleId;
-  var brandIsKnown = BRANDS.hasOwnProperty(v.brand);
-  var selectedBrand = brandIsKnown ? v.brand : (v.brand ? OUTRA_MARCA : Object.keys(BRANDS)[0]);
-  var brandOpts = BRAND_LIST.map(function(b){ return '<option value="'+esc(b)+'"'+(b===selectedBrand?' selected':'')+'>'+esc(b)+'</option>'; }).join('');
+  if(!vehicleFormType) vehicleFormType = getVehicleType(v);
+  var formType = vehicleFormType;
+  var formBrands = getBrandsFor(formType);
+  var brandIsKnown = formBrands.hasOwnProperty(v.brand) && getVehicleType(v)===formType;
+  var selectedBrand = brandIsKnown ? v.brand : (v.brand && getVehicleType(v)===formType ? OUTRA_MARCA : Object.keys(formBrands)[0]);
+  var brandOpts = getBrandListFor(formType).map(function(b){ return '<option value="'+esc(b)+'"'+(b===selectedBrand?' selected':'')+'>'+esc(b)+'</option>'; }).join('');
   var showCustomBrand = selectedBrand === OUTRA_MARCA;
-  var modelsForBrand = BRANDS[selectedBrand] || [];
+  var modelsForBrand = formBrands[selectedBrand] || [];
   var modelIsKnown = modelsForBrand.indexOf(v.model) !== -1;
   var modelOpts = modelsForBrand.map(function(m){ return '<option value="'+esc(m)+'"'+(m===v.model?' selected':'')+'>'+esc(m)+'</option>'; }).join('')
     + '<option value="'+OUTRO_MODELO+'"'+(!modelIsKnown && v.model && !showCustomBrand ? ' selected':'')+'>'+OUTRO_MODELO+'</option>';
   var showCustomModel = showCustomBrand || (!modelIsKnown && !!v.model);
-  var tankCapacity = v.tankCapacity!=null ? v.tankCapacity : getDefaultTankCapacity(selectedBrand, v.model);
+  var tankCapacity = v.tankCapacity!=null ? v.tankCapacity : getDefaultTankCapacity(selectedBrand, v.model, formType);
+  var typeChips = '<div class="field"><span class="field-label">Tipo de veículo</span><div class="theme-filter-row" id="v-type-row">' +
+    VEHICLE_TYPES.map(function(t){
+      var on = t.key===formType;
+      return '<div class="theme-chip vtype-chip '+(on?'active':'')+'" data-action="set-vehicle-type" data-type="'+t.key+'">' +
+        icon(t.icon,16,on?'var(--amber)':'var(--muted)') + '<span class="theme-name">'+t.label+'</span></div>';
+    }).join('') + '</div></div>';
   var gaugeDivisions = getVehicleGaugeDivisions(v);
   var photoPreview = vehiclePhotoDraft
     ? '<img id="v-photo-preview-img" class="photo-preview" src="'+vehiclePhotoDraft+'" alt="">'
-    : '<div id="v-photo-preview-ph" class="photo-preview-placeholder">'+icon('car',22,'var(--dim2)')+'</div>';
+    : '<div id="v-photo-preview-ph" class="photo-preview-placeholder">'+icon(formType==='moto'?'moto':'car',22,'var(--dim2)')+'</div>';
 
   return '<div class="overlay" data-action="close-modal-bg">' +
     '<div class="sheet" onclick="event.stopPropagation()">' +
       '<div class="sheet-head"><h2>'+(isEdit?'Editar veículo':'Novo veículo')+'</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
+      typeChips +
       '<div class="field">' +
         '<span class="field-label">Foto ou ilustração do veículo</span>' +
         '<div class="photo-picker" id="v-photo-wrap">' +
@@ -3834,14 +3901,14 @@ function renderVehicleForm(){
       '</div>' +
       fieldHtml('Placa', '<input id="v-plate" style="font-family:var(--mono); letter-spacing:.05em; text-transform:uppercase" value="'+esc(v.plate)+'" placeholder="Ex: ABC1D23">') +
       fieldHtml('Marca', '<select id="v-brand">'+brandOpts+'</select>') +
-      '<div id="v-custom-brand-wrap" style="display:'+(showCustomBrand?'block':'none')+'">'+fieldHtml('Especifique a marca', '<input id="v-custom-brand" value="'+esc(showCustomBrand?v.brand:'')+'" placeholder="Ex: Subaru">')+'</div>' +
+      '<div id="v-custom-brand-wrap" style="display:'+(showCustomBrand?'block':'none')+'">'+fieldHtml('Especifique a marca', '<input id="v-custom-brand" value="'+esc(showCustomBrand?v.brand:'')+'" placeholder="'+(formType==='moto'?'Ex: Ducati':'Ex: Subaru')+'">')+'</div>' +
       '<div id="v-model-wrap" style="display:'+(showCustomBrand?'none':'block')+'">'+fieldHtml('Modelo', '<select id="v-model">'+modelOpts+'</select>')+'</div>' +
-      '<div id="v-custom-model-wrap" style="display:'+(showCustomModel?'block':'none')+'">'+fieldHtml('Especifique o modelo', '<input id="v-custom-model" value="'+esc(showCustomModel?v.model:'')+'" placeholder="Ex: Meriva">')+'</div>' +
+      '<div id="v-custom-model-wrap" style="display:'+(showCustomModel?'block':'none')+'">'+fieldHtml('Especifique o modelo', '<input id="v-custom-model" value="'+esc(showCustomModel?v.model:'')+'" placeholder="'+(formType==='moto'?'Ex: Monster 797':'Ex: Meriva')+'">')+'</div>' +
       fieldHtml('Cor', '<input id="v-color" value="'+esc(v.color)+'" placeholder="Ex: Prata">') +
       fieldHtml('Capacidade do tanque (litros)', '<input id="v-tank" type="number" min="1" step="1" value="'+tankCapacity+'">') +
       '<p class="tank-hint">Sugestão automática pelo modelo — ajuste se souber o valor exato do manual do veículo.</p>' +
       fieldHtml('Divisões do marcador de combustível', '<input id="v-gaugedivisions" type="number" min="2" max="20" step="1" value="'+gaugeDivisions+'">') +
-      '<p class="tank-hint">Quantos traços há entre E e F no painel deste carro (padrão: 8). Isso ajusta só o desenho do marcador na tela de abastecimento.</p>' +
+      '<p class="tank-hint">Quantos traços há entre E e F no painel deste veículo (padrão: 8). Isso ajusta só o desenho do marcador na tela de abastecimento.</p>' +
       dateFieldHtml('Data de aquisição', 'v-acqdate', v.acquisitionDate||'') +
       fieldHtml('Valor de aquisição (R$)', '<input id="v-acqvalue" type="text" inputmode="decimal" value="'+toMaskedStr(v.purchaseValue)+'" placeholder="0,00">') +
       fieldHtml('Km inicial (no momento da compra)', '<input id="v-initodo" type="text" inputmode="numeric" class="km-input" value="'+(v.initialOdometer!=null?formatKmInt(v.initialOdometer):'')+'" placeholder="Ex: 32.000">') +
@@ -3977,7 +4044,7 @@ function renderVehicleSwitch(){
       var isActive = v.id === state.activeVehicleId;
       var thumb = v.photo
         ? '<img class="vswitch-photo" src="'+v.photo+'" alt="">'
-        : '<div class="vswitch-photo" style="display:flex;align-items:center;justify-content:center;">'+icon('car',16,'var(--dim2)')+'</div>';
+        : '<div class="vswitch-photo" style="display:flex;align-items:center;justify-content:center;">'+icon(vehicleIconName(v),16,'var(--dim2)')+'</div>';
       html += '<div class="vswitch-row '+(isActive?'active':'')+'" data-action="select-vehicle" data-id="'+v.id+'">' +
         thumb +
         '<div class="card-main">' +
@@ -4464,12 +4531,16 @@ function attachEvents(){
           deleteVehicle(vid);
         }
       }
+      else if(action==='set-vehicle-type'){
+        var newType = el.getAttribute('data-type')==='moto' ? 'moto' : 'carro';
+        if(newType !== vehicleFormType) applyVehicleFormType(newType);
+      }
       else if(action==='select-vehicle'){ selectVehicle(el.getAttribute('data-id')); if(modal==='vehicle-switch') closeModal(); }
       else if(action==='remove-photo'){
         vehiclePhotoDraft = null;
         var wrap = document.getElementById('v-photo-wrap');
         if(wrap){
-          wrap.innerHTML = '<div class="photo-preview-placeholder">'+icon('car',22,'var(--dim2)')+'</div>' +
+          wrap.innerHTML = '<div class="photo-preview-placeholder">'+icon(vehicleFormType==='moto'?'moto':'car',22,'var(--dim2)')+'</div>' +
             '<div class="photo-actions"><input type="file" id="v-photo-input" accept="image/*" class="native-file-input"></div>';
           document.getElementById('v-photo-input').addEventListener('change', handlePhotoInputChange);
         }
@@ -4694,14 +4765,15 @@ function attachEvents(){
           }
         }
         var color = document.getElementById('v-color').value.trim();
-        var tankCapacity = Number(document.getElementById('v-tank').value) || getDefaultTankCapacity(brand, model);
+        var vehicleType = vehicleFormType==='moto' ? 'moto' : 'carro';
+        var tankCapacity = Number(document.getElementById('v-tank').value) || getDefaultTankCapacity(brand, model, vehicleType);
         var gaugeDivisionsVal = parseInt(document.getElementById('v-gaugedivisions').value, 10);
         var gaugeDivisions = (gaugeDivisionsVal && gaugeDivisionsVal>=2) ? gaugeDivisionsVal : DEFAULT_GAUGE_DIVISIONS;
         var acquisitionDate = document.getElementById('v-acqdate').value;
         var purchaseValue = parseMasked(document.getElementById('v-acqvalue').value);
         var initOdoVal = document.getElementById('v-initodo').value;
         var initialOdometer = parseKmValue(initOdoVal);
-        var vData = { plate:plate, brand:brand, model:model, color:color, tankCapacity:tankCapacity, gaugeDivisions:gaugeDivisions, photo:vehiclePhotoDraft, acquisitionDate:acquisitionDate, purchaseValue:purchaseValue, initialOdometer:initialOdometer };
+        var vData = { vehicleType:vehicleType, plate:plate, brand:brand, model:model, color:color, tankCapacity:tankCapacity, gaugeDivisions:gaugeDivisions, photo:vehiclePhotoDraft, acquisitionDate:acquisitionDate, purchaseValue:purchaseValue, initialOdometer:initialOdometer };
         if(editingVehicleId){ updateVehicle(editingVehicleId, vData); }
         else { addVehicle(vData); }
         closeModal();
@@ -4781,15 +4853,15 @@ function attachEvents(){
       document.getElementById('v-model-wrap').style.display = isOutra ? 'none' : 'block';
       var tankInput = document.getElementById('v-tank');
       if(!isOutra){
-        var models = BRANDS[brandSel.value] || [];
+        var models = getBrandsFor(vehicleFormType)[brandSel.value] || [];
         var opts = models.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('') + '<option value="'+OUTRO_MODELO+'">'+OUTRO_MODELO+'</option>';
         var modelSelEl = document.getElementById('v-model');
         modelSelEl.innerHTML = opts;
         document.getElementById('v-custom-model-wrap').style.display = 'none';
-        if(tankInput) tankInput.value = getDefaultTankCapacity(brandSel.value, modelSelEl.value);
+        if(tankInput) tankInput.value = getDefaultTankCapacity(brandSel.value, modelSelEl.value, vehicleFormType);
       } else {
         document.getElementById('v-custom-model-wrap').style.display = 'block';
-        if(tankInput) tankInput.value = DEFAULT_TANK_CAPACITY;
+        if(tankInput) tankInput.value = getDefaultTankFor(vehicleFormType);
       }
     });
   }
@@ -4799,7 +4871,7 @@ function attachEvents(){
       document.getElementById('v-custom-model-wrap').style.display = modelSel.value===OUTRO_MODELO ? 'block' : 'none';
       var tankInput = document.getElementById('v-tank');
       if(tankInput && modelSel.value!==OUTRO_MODELO && brandSel){
-        tankInput.value = getDefaultTankCapacity(brandSel.value, modelSel.value);
+        tankInput.value = getDefaultTankCapacity(brandSel.value, modelSel.value, vehicleFormType);
       }
     });
   }
