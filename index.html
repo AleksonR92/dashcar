@@ -338,8 +338,12 @@
   .odo-quick-btn:hover{ color:var(--text); border-color:var(--dim2); }
   .odo-quick-btn:active{ background:var(--panel); }
 
-  .gauge-box{ text-align:center; padding:6px 0 4px; }
-  .gauge-readout{ margin-top:8px; font-size:13px; font-weight:600; color:var(--text); }
+  .fulltank-row{ display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--border2); border-radius:10px; padding:11px 12px; margin-bottom:14px; cursor:pointer; }
+  .fulltank-row input[type=checkbox]{ width:20px; height:20px; flex:none; margin:0; padding:0; accent-color:var(--teal); cursor:pointer; }
+  .fulltank-row .ft-txt{ display:flex; flex-direction:column; gap:2px; }
+  .fulltank-row .ft-title{ font-size:13.5px; font-weight:600; color:var(--text); }
+  .fulltank-row .ft-sub{ font-size:11px; color:var(--dim); line-height:1.4; }
+  .ft-badge{ display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color:var(--teal); border:1px solid var(--teal); border-radius:999px; padding:1px 7px; }
 
   .photo-picker{ display:flex; align-items:center; gap:14px; }
   .photo-preview, .photo-preview-placeholder{
@@ -1059,7 +1063,7 @@ function computeMissionStatus(mission, vehicleId){
 }
 
 const DATA_VERSION = 1;
-const APP_VERSION = 'rev73'; // atualize este número a cada nova revisão entregue
+const APP_VERSION = 'rev74'; // atualize este número a cada nova revisão entregue
 const STORAGE_KEY = 'controle-veiculo-data';
 function chartColors(){ return [cssVar('--amber'), cssVar('--teal'), cssVar('--red'), cssVar('--muted'), '#6a8caf', '#a97cb0']; }
 function cssVar(name){
@@ -1151,12 +1155,6 @@ function getDefaultTankCapacity(brand, model, type){
 function getVehicleType(v){ return (v && v.vehicleType==='moto') ? 'moto' : 'carro'; }
 function vehicleIconName(v){ return getVehicleType(v)==='moto' ? 'moto' : 'car'; }
 let vehicleFormType = null; // tipo escolhido no formulário de veículo aberto ('carro' | 'moto')
-const DEFAULT_GAUGE_DIVISIONS = 8; // nº de traços/segmentos entre E e F, usado para desenhar o marcador
-function getVehicleGaugeDivisions(vehicle){
-  var n = vehicle && vehicle.gaugeDivisions;
-  n = parseInt(n, 10);
-  return (n && n>=2) ? n : DEFAULT_GAUGE_DIVISIONS;
-}
 
 /* ---------- icons (inline svg, stroke=currentColor) ---------- */
 const ICONS = {
@@ -1212,7 +1210,6 @@ let state = {
   locations: { manutencao: [], rotina: [], combustivel: [], ocorrencia: [] }, // locais salvos por tema: { id, name, address }
   odometerLogs: [], // atualizações avulsas de odômetro, independentes de manutenção/abastecimento/ocorrência: { id, vehicleId, date, odometer }
   tabSoundEnabled: true, // som de ferramenta ao navegar pra aba de Manutenção
-  fuelGaugeEnabled: true, // exibir o marcador de nível de combustível ao abastecer; desativado também remove o card "Último km/l"
   percursos: [], // viagens rastreadas por GPS: { id, vehicleId, date, startAddress, endAddress, km, startTime, endTime }
   contacts: {} // nomes salvos por e-mail pra conversa: { 'fulano@exemplo.com': 'Fulano' }
 };
@@ -1252,14 +1249,13 @@ let pendingTripSummary = null; // percurso recém-finalizado, aguardando confirm
 let awaitingTripStartConfirm = false; // aguardando o usuário decidir se quer atualizar o odômetro antes de iniciar
 let tripError = ''; // mensagem de erro ao tentar iniciar um percurso (ex: permissão de localização negada)
 let editingVehicleId = null; // null = creating a new vehicle in the vehicle form
-let fuelGaugeFraction = 0.5; // 0 (E) .. 1 (F), current pointer value while the fuel form is open
 let vehiclePhotoDraft = null; // base64 data URL of the vehicle photo being edited, null = none
 let editingFuelId = null; // null = creating a new fuel entry, otherwise the id being edited
 let editingMaintenanceId = null; // null = creating a new maintenance entry, otherwise the id being edited
 let editingRoutineId = null; // null = creating a new routine entry, otherwise the id being edited
 let editingOccurrenceId = null; // null = creating a new occurrence, otherwise the id being edited
 let awaitingAddressPaste = false; // true right after "find-address-maps" opens Google Maps, until the user returns to the app
-let capacityWarning = null; // { volBefore, volAfter, capacity, excess } when liters exceed tank capacity
+let capacityWarning = null; // { liters, capacity, excess } quando os litros informados passam da capacidade do tanque
 let dashFilterStart = ''; // dashboard period filter — start date (YYYY-MM-DD) or '' for no limit
 let dashFilterEnd = ''; // dashboard period filter — end date (YYYY-MM-DD) or '' for no limit
 let odoRollDelayTimer = null; // aguarda alguns segundos após salvar antes de iniciar o giro
@@ -1574,7 +1570,6 @@ function applyLoadedData(parsed){
   };
   state.odometerLogs = Array.isArray(parsed.odometerLogs) ? parsed.odometerLogs : [];
   state.tabSoundEnabled = (parsed.tabSoundEnabled!==false);
-  state.fuelGaugeEnabled = (parsed.fuelGaugeEnabled!==false);
   state.percursos = Array.isArray(parsed.percursos) ? parsed.percursos : [];
   state.contacts = (parsed.contacts && typeof parsed.contacts==='object') ? parsed.contacts : {};
   if(Array.isArray(parsed.vehicles)){
@@ -1612,7 +1607,7 @@ function load(){
   }catch(e){ applyDefaultMaintenanceIntervals(); /* start empty */ }
 }
 function buildSyncPayload(){
-  return { maintenance: state.maintenance, routine: state.routine, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations, odometerLogs: state.odometerLogs, tabSoundEnabled: state.tabSoundEnabled, fuelGaugeEnabled: state.fuelGaugeEnabled, percursos: state.percursos, contacts: state.contacts };
+  return { maintenance: state.maintenance, routine: state.routine, fuel: state.fuel, occurrences: state.occurrences, vehicles: state.vehicles, activeVehicleId: state.activeVehicleId, maintenanceIntervals: state.maintenanceIntervals, gamification: state.gamification, locations: state.locations, odometerLogs: state.odometerLogs, tabSoundEnabled: state.tabSoundEnabled, percursos: state.percursos, contacts: state.contacts };
 }
 function persistToCloud(){
   if(!authUser || !window.__fb) return;
@@ -1648,21 +1643,6 @@ function getVehicleLabel(v){
   if(!v) return 'Veículo';
   var title = (v.brand || v.model) ? (v.brand+' '+v.model).trim() : (v.plate || 'Veículo sem nome');
   return title;
-}
-
-function getVolumeAfter(entry, fallbackCapacity){
-  var cap = entry.tankCapacityAtEntry || fallbackCapacity || DEFAULT_TANK_CAPACITY;
-  if(entry.gaugeBefore!=null){
-    var before = entry.gaugeBefore * cap;
-    return Math.min(before + Number(entry.liters||0), cap);
-  }
-  if(entry.fullTank) return cap; // legacy entries saved before the gauge feature
-  return null; // legacy entry without gauge data — unknown tank level after fill
-}
-function getVolumeBefore(entry, fallbackCapacity){
-  var cap = entry.tankCapacityAtEntry || fallbackCapacity || DEFAULT_TANK_CAPACITY;
-  if(entry.gaugeBefore!=null) return entry.gaugeBefore * cap;
-  return null;
 }
 
 // Retorna { min, max } (strings YYYY-MM-DD) cobrindo todas as datas registradas (manutenção, combustível, ocorrência)
@@ -1756,31 +1736,40 @@ function computeStatsForVehicle(vehicleId, dateStart, dateEnd){
   }
 
   var avgConsumo, lastKml, consumptionTrend;
-  if(state.fuelGaugeEnabled===false){
-    // indicador de combustível desativado: usa os valores de km/L informados manualmente pelo usuário
-    var manualEntries = fuelList.filter(function(f){ return f.manualKml!=null && !isNaN(Number(f.manualKml)) && Number(f.manualKml)>0; })
-      .slice().sort(function(a,b){ return (a.date||'')<(b.date||'') ? -1 : ((a.date||'')>(b.date||'') ? 1 : 0); });
-    consumptionTrend = manualEntries.map(function(f){ return { label: formatDate(f.date), kml: Number(Number(f.manualKml).toFixed(2)) }; });
-    avgConsumo = manualEntries.length ? (manualEntries.reduce(function(s,f){return s+Number(f.manualKml);},0) / manualEntries.length) : null;
-    lastKml = consumptionTrend.length ? consumptionTrend[consumptionTrend.length-1].kml : null;
-  } else {
-    var fuelByOdo = fuelList.filter(function(f){return !isNaN(Number(f.odometer));}).slice().sort(function(a,b){return a.odometer-b.odometer;});
-    var totalKm=0, totalLitros=0;
-    consumptionTrend = [];
-    for(var i=1;i<fuelByOdo.length;i++){
-      var prev = fuelByOdo[i-1], cur = fuelByOdo[i];
-      var dist = Number(cur.odometer) - Number(prev.odometer);
-      var volAfterPrev = getVolumeAfter(prev, vehicleCapacity);
-      var volBeforeCur = getVolumeBefore(cur, vehicleCapacity);
-      var consumed = (volAfterPrev!=null && volBeforeCur!=null) ? (volAfterPrev - volBeforeCur) : Number(cur.liters||0);
-      if(dist>0 && consumed>0){
-        totalKm += dist; totalLitros += consumed;
-        consumptionTrend.push({ label: formatDate(cur.date), kml: Number((dist/consumed).toFixed(2)) });
-      }
+  // Autonomia (rev74): calculada entre dois abastecimentos marcados como "Tanque cheio"
+  // (km rodados ÷ litros abastecidos depois do primeiro, somando parciais no meio e o segundo),
+  // e/ou pelo km/L informado a partir do painel do veículo. A capacidade do tanque valida os trechos.
+  var consumptionPoints = [];
+  var fuelByOdo = fuelList.filter(function(f){ return f.odometer!=null && f.odometer!=='' && !isNaN(Number(f.odometer)); }).slice()
+    .sort(function(a,b){ var d = Number(a.odometer)-Number(b.odometer); if(d!==0) return d; return (a.date||'')<(b.date||'') ? -1 : ((a.date||'')>(b.date||'') ? 1 : 0); });
+  var lastFull = null, litersSinceFull = 0, segmentInvalid = false;
+  fuelByOdo.forEach(function(f){
+    var cap = Number(f.tankCapacityAtEntry || vehicleCapacity || DEFAULT_TANK_CAPACITY);
+    var lit = Number(f.liters||0);
+    if(lastFull){
+      litersSinceFull += lit;
+      if(cap>0 && lit > cap + 0.01) segmentInvalid = true; // litros acima da capacidade — trecho descartado
     }
-    avgConsumo = totalLitros>0 ? totalKm/totalLitros : null;
-    lastKml = consumptionTrend.length ? consumptionTrend[consumptionTrend.length-1].kml : null;
-  }
+    if(f.fullTank){
+      if(lastFull){
+        var dist = Number(f.odometer) - Number(lastFull.odometer);
+        if(dist>0 && litersSinceFull>0 && !segmentInvalid){
+          consumptionPoints.push({ date: f.date, kml: dist/litersSinceFull, source:'tanque' });
+        }
+      }
+      lastFull = f; litersSinceFull = 0; segmentInvalid = false;
+    }
+  });
+  fuelList.forEach(function(f){
+    var mk = Number(f.manualKml);
+    if(f.manualKml!=null && f.manualKml!=='' && !isNaN(mk) && mk>0){
+      consumptionPoints.push({ date: f.date, kml: mk, source:'painel' });
+    }
+  });
+  consumptionPoints.sort(function(a,b){ return (a.date||'')<(b.date||'') ? -1 : ((a.date||'')>(b.date||'') ? 1 : 0); });
+  consumptionTrend = consumptionPoints.map(function(c){ return { label: formatDate(c.date), kml: Number(c.kml.toFixed(2)), source: c.source }; });
+  avgConsumo = consumptionPoints.length ? (consumptionPoints.reduce(function(sum,c){ return sum + c.kml; }, 0) / consumptionPoints.length) : null;
+  lastKml = consumptionTrend.length ? consumptionTrend[consumptionTrend.length-1].kml : null;
 
   var allDatesForDays = maint.map(function(m){return m.date;})
     .concat(routineList.map(function(r){return r.date;}))
@@ -1884,11 +1873,11 @@ function violatesSequence(entry, excludeId){
 }
 
 function checkTankCapacity(entry, capacity){
-  if(entry.gaugeBefore==null || !capacity) return null;
-  var volBefore = entry.gaugeBefore * capacity;
-  var volAfter = volBefore + Number(entry.liters||0);
-  if(volAfter > capacity + 0.01){
-    return { volBefore: volBefore, volAfter: volAfter, capacity: capacity, excess: volAfter - capacity };
+  var cap = Number(capacity);
+  var lit = Number(entry.liters||0);
+  if(!cap || !lit) return null;
+  if(lit > cap + 0.01){
+    return { liters: lit, capacity: cap, excess: lit - cap };
   }
   return null;
 }
@@ -2264,7 +2253,7 @@ function renderHeader(stats){
           '<div class="stat-val">'+formatBRL(stats.monthCombustivel)+'</div>' +
         '</div>' +
         '<div class="stat-card">' +
-          '<div class="stat-head">'+icon('gauge',12,'var(--muted)')+'<span>'+(state.fuelGaugeEnabled!==false ? 'Último km/l' : 'Média km/l')+'</span></div>' +
+          '<div class="stat-head">'+icon('gauge',12,'var(--muted)')+'<span>Último km/l</span></div>' +
           '<div class="stat-val">'+(stats.lastKml!=null ? stats.lastKml.toFixed(1)+' km/l' : '—')+'</div>' +
         '</div>' +
       '</div>' +
@@ -3368,6 +3357,7 @@ function renderFuelList(){
           '<span>'+icon('calendar',11)+' '+formatDate(f.date)+'</span>' +
           '<span>'+icon('gauge',11)+' '+formatKm(f.odometer)+'</span>' +
           '<span>'+((f.liters && f.cost) ? formatBRL(f.cost/f.liters)+'/L' : '')+'</span>' +
+          (f.fullTank ? '<span class="ft-badge">'+icon('check',10,'var(--teal)')+' Tanque cheio</span>' : '') +
         '</div>' +
         (f.address ? '<div class="card-meta"><span>'+icon('mappin',11)+' '+esc(locationDisplayName('combustivel', f.address))+'</span></div>' : '') +
       '</div>' +
@@ -3700,42 +3690,6 @@ function simplifiedLocationFieldHtml(value, category){
   '</div>';
 }
 
-function fuelLevelLabel(fraction){
-  if(fraction <= 0.06) return 'E (vazio)';
-  if(fraction >= 0.94) return 'F (cheio)';
-  var eighth = Math.round(fraction*8);
-  var map = {1:'1/8',2:'1/4',3:'3/8',4:'1/2',5:'5/8',6:'3/4',7:'7/8'};
-  return map[eighth] || (Math.round(fraction*100)+'%');
-}
-
-function renderGaugeSVG(fraction, divisions){
-  divisions = divisions || DEFAULT_GAUGE_DIVISIONS;
-  var cx=110, cy=118, r=82;
-  var angleDeg = 180 - fraction*180;
-  var rad = angleDeg * Math.PI/180;
-  var tipX = cx + r*Math.cos(rad);
-  var tipY = cy - r*Math.sin(rad);
-  function tick(deg, len1, len2){
-    var rr = deg*Math.PI/180;
-    var x1 = cx + len1*Math.cos(rr), y1 = cy - len1*Math.sin(rr);
-    var x2 = cx + len2*Math.cos(rr), y2 = cy - len2*Math.sin(rr);
-    return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="var(--border2)" stroke-width="2"/>';
-  }
-  var tickDegs = [];
-  for(var i=0;i<=divisions;i++){ tickDegs.push(180 - i*(180/divisions)); }
-  var ticks = tickDegs.map(function(d){ return tick(d, 68, 78); }).join('');
-  return '' +
-  '<svg id="fuel-gauge-svg" viewBox="0 0 220 135" style="width:100%; max-width:260px; display:block; margin:0 auto; touch-action:none; cursor:pointer;">' +
-    '<path d="M '+(cx-r)+' '+cy+' A '+r+' '+r+' 0 0 1 '+(cx+r)+' '+cy+'" fill="none" stroke="var(--border)" stroke-width="16" stroke-linecap="round"/>' +
-    ticks +
-    '<text x="'+(cx-r-4)+'" y="'+(cy+16)+'" fill="var(--red)" font-size="13" font-weight="700" text-anchor="middle">E</text>' +
-    '<text x="'+cx+'" y="'+(cy-r-8)+'" fill="var(--muted)" font-size="11" text-anchor="middle">½</text>' +
-    '<text x="'+(cx+r+4)+'" y="'+(cy+16)+'" fill="var(--teal)" font-size="13" font-weight="700" text-anchor="middle">F</text>' +
-    '<line id="gauge-needle" x1="'+cx+'" y1="'+cy+'" x2="'+tipX+'" y2="'+tipY+'" stroke="var(--amber)" stroke-width="4" stroke-linecap="round"/>' +
-    '<circle cx="'+cx+'" cy="'+cy+'" r="7" fill="var(--amber)"/>' +
-  '</svg>';
-}
-
 function renderMaintenanceForm(){
   var pf = formPrefill || {};
   var isEdit = !!editingMaintenanceId;
@@ -3827,30 +3781,23 @@ function renderFuelForm(){
   var opts = FUEL_TYPES.map(function(f){ return '<option value="'+esc(f)+'"'+(f===pf.fuelType?' selected':'')+'>'+esc(f)+'</option>'; }).join('');
   var activeVehicle = state.vehicles.find(function(v){return v.id===state.activeVehicleId;});
   var capacity = activeVehicle ? (activeVehicle.tankCapacity || DEFAULT_TANK_CAPACITY) : DEFAULT_TANK_CAPACITY;
-  var gaugeDivisions = getVehicleGaugeDivisions(activeVehicle);
-  if(pf.gaugeBefore!=null) fuelGaugeFraction = pf.gaugeBefore;
-  var litersEstimate = Math.round(fuelGaugeFraction * capacity);
   return '<div class="overlay" data-action="close-modal-bg">' +
     '<div class="sheet teal" onclick="event.stopPropagation()">' +
       '<div class="sheet-head"><h2>'+(isEdit?'Editar abastecimento':'Novo abastecimento')+'</h2><button class="sheet-close" data-action="close-modal">'+icon('x',20)+'</button></div>' +
       fieldHtml('Tipo de combustível', '<select id="f-fueltype">'+opts+'</select>') +
       dateFieldHtml('Data', 'f-date', pf.date || localTodayISO()) +
-      (state.fuelGaugeEnabled!==false ?
-        '<div class="field" style="margin-bottom:16px">' +
-          '<span class="field-label">Nível do ponteiro antes de abastecer</span>' +
-          '<div class="gauge-box">' +
-            renderGaugeSVG(fuelGaugeFraction, gaugeDivisions) +
-            '<div id="gauge-readout" class="gauge-readout">'+fuelLevelLabel(fuelGaugeFraction)+' · ~'+litersEstimate+' L de '+capacity+' L</div>' +
-          '</div>' +
-        '</div>' :
-        fieldHtml('Consumo (km/L) do painel', '<input id="f-manualkml" type="text" inputmode="decimal" value="'+toMaskedStr(pf.manualKml)+'" placeholder="Ex: 12,5">')
-      ) +
+      '<label class="fulltank-row" for="f-fulltank">' +
+        '<input type="checkbox" id="f-fulltank"'+(pf.fullTank?' checked':'')+'>' +
+        '<span class="ft-txt"><span class="ft-title">Tanque cheio</span>' +
+        '<span class="ft-sub">Marque quando completar o tanque. A autonomia é calculada entre dois abastecimentos com tanque cheio.</span></span>' +
+      '</label>' +
+      fieldHtml('Consumo (km/L) do painel — opcional', '<input id="f-manualkml" type="text" inputmode="decimal" value="'+toMaskedStr(pf.manualKml)+'" placeholder="Ex: 12,5">') +
       '<div class="field-row">' +
         fieldHtml('Litros adicionados', '<input id="f-liters" type="text" inputmode="decimal" value="'+toMaskedStr(pf.liters)+'" placeholder="0,00">') +
         fieldHtml('Custo por litro (R$)', '<input id="f-priceperliter" type="text" inputmode="decimal" value="'+toMaskedStr(pf.pricePerLiter!=null ? pf.pricePerLiter : (pf.liters && pf.cost ? pf.cost/pf.liters : null))+'" placeholder="0,00">') +
       '</div>' +
       fieldHtml('Custo total (R$)', '<input id="f-cost" type="text" inputmode="decimal" value="'+toMaskedStr(pf.cost)+'" placeholder="0,00">') +
-      '<p class="tank-hint" style="margin-top:-8px;">Preencha 2 dos 3 campos (litros, custo por litro ou custo total) — o terceiro é calculado automaticamente.</p>' +
+      '<p class="tank-hint" style="margin-top:-8px;">Preencha 2 dos 3 campos (litros, custo por litro ou custo total) — o terceiro é calculado automaticamente. Capacidade do tanque: '+capacity+' L.</p>' +
       odoFieldHtml(pf.odometer) +
       addressFieldHtml(pf.address, 'Endereço (posto de combustível)', 'combustivel') +
       '<button class="btn-primary teal" data-action="save-fuel">'+(isEdit?'Salvar alterações':'Salvar abastecimento')+' '+icon('chevron',16,'var(--on-accent)')+'</button>' +
@@ -3880,7 +3827,6 @@ function renderVehicleForm(){
       return '<div class="theme-chip vtype-chip '+(on?'active':'')+'" data-action="set-vehicle-type" data-type="'+t.key+'">' +
         icon(t.icon,16,on?'var(--amber)':'var(--muted)') + '<span class="theme-name">'+t.label+'</span></div>';
     }).join('') + '</div></div>';
-  var gaugeDivisions = getVehicleGaugeDivisions(v);
   var photoPreview = vehiclePhotoDraft
     ? '<img id="v-photo-preview-img" class="photo-preview" src="'+vehiclePhotoDraft+'" alt="">'
     : '<div id="v-photo-preview-ph" class="photo-preview-placeholder">'+icon(formType==='moto'?'moto':'car',22,'var(--dim2)')+'</div>';
@@ -3906,9 +3852,7 @@ function renderVehicleForm(){
       '<div id="v-custom-model-wrap" style="display:'+(showCustomModel?'block':'none')+'">'+fieldHtml('Especifique o modelo', '<input id="v-custom-model" value="'+esc(showCustomModel?v.model:'')+'" placeholder="'+(formType==='moto'?'Ex: Monster 797':'Ex: Meriva')+'">')+'</div>' +
       fieldHtml('Cor', '<input id="v-color" value="'+esc(v.color)+'" placeholder="Ex: Prata">') +
       fieldHtml('Capacidade do tanque (litros)', '<input id="v-tank" type="number" min="1" step="1" value="'+tankCapacity+'">') +
-      '<p class="tank-hint">Sugestão automática pelo modelo — ajuste se souber o valor exato do manual do veículo.</p>' +
-      fieldHtml('Divisões do marcador de combustível', '<input id="v-gaugedivisions" type="number" min="2" max="20" step="1" value="'+gaugeDivisions+'">') +
-      '<p class="tank-hint">Quantos traços há entre E e F no painel deste veículo (padrão: 8). Isso ajusta só o desenho do marcador na tela de abastecimento.</p>' +
+      '<p class="tank-hint">Sugestão automática pelo modelo — ajuste se souber o valor exato do manual do veículo. Usada para validar os litros abastecidos e o cálculo da autonomia.</p>' +
       dateFieldHtml('Data de aquisição', 'v-acqdate', v.acquisitionDate||'') +
       fieldHtml('Valor de aquisição (R$)', '<input id="v-acqvalue" type="text" inputmode="decimal" value="'+toMaskedStr(v.purchaseValue)+'" placeholder="0,00">') +
       fieldHtml('Km inicial (no momento da compra)', '<input id="v-initodo" type="text" inputmode="numeric" class="km-input" value="'+(v.initialOdometer!=null?formatKmInt(v.initialOdometer):'')+'" placeholder="Ex: 32.000">') +
@@ -4018,11 +3962,6 @@ function renderSettingsModal(){
       '<span style="font-size:12.5px; color:var(--muted);">Tocar som de ferramenta ao salvar uma manutenção</span>' +
       '<button class="odo-quick-btn" data-action="toggle-tab-sound" style="flex:none;">'+(state.tabSoundEnabled!==false ? 'Ativado' : 'Desativado')+'</button>' +
     '</div>';
-  html += '<span class="field-label" style="display:block; margin:22px 0 6px;">Indicador de combustível</span>' +
-    '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:10px 12px;">' +
-      '<span style="font-size:12.5px; color:var(--muted);">Marcador de nível ao abastecer. Desativar também remove o card "Último km/l"</span>' +
-      '<button class="odo-quick-btn" data-action="toggle-fuel-gauge" style="flex:none;">'+(state.fuelGaugeEnabled!==false ? 'Ativado' : 'Desativado')+'</button>' +
-    '</div>';
   html += '<span class="field-label" style="display:block; margin:22px 0 6px;">Conta</span>' +
     '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:10px 12px;">' +
       '<span style="font-size:12.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc((authUser && (authUser.email||authUser.displayName)) || '')+'</span>' +
@@ -4083,7 +4022,7 @@ function renderCapacityWarning(){
   return '<div class="overlay center">' +
     '<div class="warn-box">' +
       '<div class="warn-head">'+icon('alert',18,'var(--red)')+'<h3>Volume acima da capacidade</h3></div>' +
-      '<p class="warn-text">O nível indicado antes de abastecer (~'+Math.round(c.volBefore)+' L) somado aos litros adicionados resultaria em <strong>'+c.volAfter.toFixed(1)+' L</strong>, mas o tanque comporta apenas <strong>'+c.capacity+' L</strong>. Ajuste a posição do ponteiro ou a quantidade de litros adicionados.</p>' +
+      '<p class="warn-text">Foram informados <strong>'+c.liters.toFixed(1).replace('.',',')+' L</strong>, mas o tanque deste veículo comporta apenas <strong>'+c.capacity+' L</strong>. Confira a quantidade de litros ou a capacidade do tanque no cadastro do veículo.</p>' +
       '<div class="warn-actions">' +
         '<button class="warn-btn confirm" data-action="ack-capacity-warning" style="flex:none; width:100%;">Entendi, vou ajustar</button>' +
       '</div>' +
@@ -4387,10 +4326,6 @@ function attachEvents(){
         state.tabSoundEnabled = (state.tabSoundEnabled===false);
         persist();
       }
-      else if(action==='toggle-fuel-gauge'){
-        state.fuelGaugeEnabled = (state.fuelGaugeEnabled===false);
-        persist();
-      }
       else if(action==='start-trip'){ startTrip(); }
       else if(action==='start-trip-prompt'){ awaitingTripStartConfirm = true; render(); }
       else if(action==='confirm-start-trip'){ awaitingTripStartConfirm = false; startTrip(); }
@@ -4487,7 +4422,6 @@ function attachEvents(){
         editingFuelId = null; editingMaintenanceId = null; editingRoutineId = null; editingOccurrenceId = null;
         var lastOdo = state.activeVehicleId ? computeStatsForVehicle(state.activeVehicleId).currentOdo : null;
         formPrefill = (lastOdo!=null && lastOdo>0) ? { odometer: lastOdo } : null;
-        if(modal==='fuel') fuelGaugeFraction = 0.5;
         render();
       }
       else if(action==='open-odometer-form'){
@@ -4609,7 +4543,6 @@ function attachEvents(){
         if(fentry){
           editingFuelId = fid;
           formPrefill = fentry;
-          fuelGaugeFraction = fentry.gaugeBefore!=null ? fentry.gaugeBefore : 0.5;
           modal = 'fuel';
           render();
         }
@@ -4731,9 +4664,17 @@ function attachEvents(){
         if(!date2 || !odo2) return;
         var activeVehicleForFuel = state.vehicles.find(function(v){return v.id===state.activeVehicleId;});
         var capacityNow = activeVehicleForFuel ? activeVehicleForFuel.tankCapacity : DEFAULT_TANK_CAPACITY;
-        var manualKmlVal = (state.fuelGaugeEnabled===false && document.getElementById('f-manualkml')) ? parseMasked(document.getElementById('f-manualkml').value) : null;
-        var fuelEntry = { date:date2, fuelType:fuelType, liters:liters, cost:cost2, odometer:parseKmValue(odo2), address:address2, gaugeBefore: (state.fuelGaugeEnabled!==false ? fuelGaugeFraction : null), manualKml: manualKmlVal, tankCapacityAtEntry: capacityNow };
-        var capIssue = (state.fuelGaugeEnabled!==false) ? checkTankCapacity(fuelEntry, capacityNow) : null;
+        var manualKmlEl = document.getElementById('f-manualkml');
+        var manualKmlVal = (manualKmlEl && manualKmlEl.value.trim()) ? parseMasked(manualKmlEl.value) : null;
+        if(manualKmlVal!=null && !(manualKmlVal>0)) manualKmlVal = null;
+        var fullTankEl = document.getElementById('f-fulltank');
+        var fuelEntry = { date:date2, fuelType:fuelType, liters:liters, cost:cost2, odometer:parseKmValue(odo2), address:address2, fullTank: !!(fullTankEl && fullTankEl.checked), manualKml: manualKmlVal, tankCapacityAtEntry: capacityNow };
+        if(editingFuelId){
+          // preserva dados antigos do marcador (versões anteriores) sem usá-los no cálculo
+          var originalFuel = state.fuel.find(function(x){ return x.id===editingFuelId; });
+          if(originalFuel && originalFuel.gaugeBefore!=null) fuelEntry.gaugeBefore = originalFuel.gaugeBefore;
+        }
+        var capIssue = checkTankCapacity(fuelEntry, capacityNow);
         if(capIssue){
           capacityWarning = capIssue;
           formPrefill = fuelEntry;
@@ -4767,13 +4708,11 @@ function attachEvents(){
         var color = document.getElementById('v-color').value.trim();
         var vehicleType = vehicleFormType==='moto' ? 'moto' : 'carro';
         var tankCapacity = Number(document.getElementById('v-tank').value) || getDefaultTankCapacity(brand, model, vehicleType);
-        var gaugeDivisionsVal = parseInt(document.getElementById('v-gaugedivisions').value, 10);
-        var gaugeDivisions = (gaugeDivisionsVal && gaugeDivisionsVal>=2) ? gaugeDivisionsVal : DEFAULT_GAUGE_DIVISIONS;
         var acquisitionDate = document.getElementById('v-acqdate').value;
         var purchaseValue = parseMasked(document.getElementById('v-acqvalue').value);
         var initOdoVal = document.getElementById('v-initodo').value;
         var initialOdometer = parseKmValue(initOdoVal);
-        var vData = { vehicleType:vehicleType, plate:plate, brand:brand, model:model, color:color, tankCapacity:tankCapacity, gaugeDivisions:gaugeDivisions, photo:vehiclePhotoDraft, acquisitionDate:acquisitionDate, purchaseValue:purchaseValue, initialOdometer:initialOdometer };
+        var vData = { vehicleType:vehicleType, plate:plate, brand:brand, model:model, color:color, tankCapacity:tankCapacity, photo:vehiclePhotoDraft, acquisitionDate:acquisitionDate, purchaseValue:purchaseValue, initialOdometer:initialOdometer };
         if(editingVehicleId){ updateVehicle(editingVehicleId, vData); }
         else { addVehicle(vData); }
         closeModal();
@@ -4960,55 +4899,6 @@ function attachEvents(){
 
   var photoInput = document.getElementById('v-photo-input');
   if(photoInput) photoInput.addEventListener('change', handlePhotoInputChange);
-
-  var gaugeSvg = document.getElementById('fuel-gauge-svg');
-  if(gaugeSvg){
-    var activeVehicleForGauge = state.vehicles.find(function(v){return v.id===state.activeVehicleId;});
-    var gaugeCapacity = activeVehicleForGauge ? (activeVehicleForGauge.tankCapacity || DEFAULT_TANK_CAPACITY) : DEFAULT_TANK_CAPACITY;
-    var cx=110, cy=118, r=82;
-
-    function updateGaugeVisual(fraction){
-      fuelGaugeFraction = fraction;
-      var angleDeg = 180 - fraction*180;
-      var rad = angleDeg * Math.PI/180;
-      var tipX = cx + r*Math.cos(rad);
-      var tipY = cy - r*Math.sin(rad);
-      var needle = document.getElementById('gauge-needle');
-      if(needle){ needle.setAttribute('x2', tipX); needle.setAttribute('y2', tipY); }
-      var readout = document.getElementById('gauge-readout');
-      if(readout){ readout.textContent = fuelLevelLabel(fraction)+' · ~'+Math.round(fraction*gaugeCapacity)+' L de '+gaugeCapacity+' L'; }
-    }
-
-    function fractionFromEvent(evt){
-      var pt = gaugeSvg.createSVGPoint();
-      pt.x = evt.clientX; pt.y = evt.clientY;
-      var ctm = gaugeSvg.getScreenCTM();
-      if(!ctm) return null;
-      var svgP = pt.matrixTransform(ctm.inverse());
-      var dx = svgP.x - cx, dy = cy - svgP.y;
-      var angle = Math.atan2(dy, dx) * 180/Math.PI; // -180..180, valid range 0..180 (upper half)
-      if(dy < 0){
-        angle = dx >= 0 ? 0 : 180; // pointer dragged below the pivot line — clamp to nearest end
-      }
-      angle = Math.max(0, Math.min(180, angle));
-      return 1 - (angle/180);
-    }
-
-    var dragging = false;
-    gaugeSvg.addEventListener('pointerdown', function(evt){
-      dragging = true;
-      try{ gaugeSvg.setPointerCapture(evt.pointerId); }catch(e){}
-      var fr = fractionFromEvent(evt);
-      if(fr!=null) updateGaugeVisual(fr);
-    });
-    gaugeSvg.addEventListener('pointermove', function(evt){
-      if(!dragging) return;
-      var fr = fractionFromEvent(evt);
-      if(fr!=null) updateGaugeVisual(fr);
-    });
-    gaugeSvg.addEventListener('pointerup', function(){ dragging = false; });
-    gaugeSvg.addEventListener('pointercancel', function(){ dragging = false; });
-  }
 
   /* ---------- régua de período (dashboard, por mês): dois inputs range nativos sobrepostos ---------- */
   var rangeInputStart = document.getElementById('range-input-start');
